@@ -45,6 +45,13 @@ def run_one(name: str) -> tuple[bool, str]:
     return ok, f"{len(rows)} rows -> {n_out} records, {n_err} errors" + (f" | {problems[:2]}" if problems else "")
 
 
+def check_registry(names):
+    reg = json.load(open(os.path.join(HERE, "registry.json"), encoding="utf-8"))
+    missing = [n for n in names if n not in reg]
+    bad = [n for n, v in reg.items() if n != "_doc" and v.get("role") not in {"sft", "prompt_only", "dpo", "style"}]
+    return missing, bad
+
+
 if __name__ == "__main__":
     names = sys.argv[1:] or sorted(f[:-3] for f in os.listdir(HERE)
                                    if f.endswith(".py") and f not in {"common.py", "test_converters.py", "__init__.py"})
@@ -53,5 +60,9 @@ if __name__ == "__main__":
         ok, msg = run_one(n)
         failed += not ok
         print(f"{'PASS' if ok else 'FAIL'}  {n}: {msg}")
-    print(f"\n{len(names) - failed}/{len(names)} converters pass")
+    missing, bad = check_registry(names)
+    if missing or bad:
+        failed += 1
+        print(f"FAIL  registry.json: missing={missing} bad_role={bad}")
+    print(f"\n{len(names) - failed}/{len(names)} converters pass (registry checked)")
     sys.exit(1 if failed else 0)

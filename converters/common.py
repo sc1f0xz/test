@@ -196,16 +196,37 @@ def validate_record(rec: dict) -> list[str]:
     return errs
 
 
+def iter_rows(path: str | None):
+    """Yield dict rows from .jsonl, .json (array) or .parquet (needs pandas+pyarrow); stdin if path is None."""
+    if path is None:
+        for line in sys.stdin:
+            if line.strip():
+                yield json.loads(line)
+    elif path.endswith(".parquet"):
+        import pandas as pd  # noqa: PLC0415
+        for r in pd.read_parquet(path).to_dict("records"):
+            yield {k: (v.tolist() if hasattr(v, "tolist") else v) for k, v in r.items()}
+    else:
+        with open(path, encoding="utf-8") as f:
+            head = f.read(1)
+            while head and head.isspace():
+                head = f.read(1)
+            f.seek(0)
+            if head == "[":
+                yield from json.load(f)
+            else:
+                for line in f:
+                    if line.strip():
+                        yield json.loads(line)
+
+
 def main(convert: Callable[[dict], Any], argv: list[str] | None = None) -> None:
     argv = sys.argv[1:] if argv is None else argv
-    fin = open(argv[0], encoding="utf-8") if argv else sys.stdin
     n_in = n_out = n_bad = 0
-    for line in fin:
-        if not line.strip():
-            continue
+    for row in iter_rows(argv[0] if argv else None):
         n_in += 1
         try:
-            out = convert(json.loads(line))
+            out = convert(row)
         except Exception as e:  # noqa: BLE001
             n_bad += 1
             print(f"skip row {n_in}: {type(e).__name__}: {e}", file=sys.stderr)

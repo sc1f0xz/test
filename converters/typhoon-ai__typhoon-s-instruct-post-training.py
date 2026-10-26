@@ -15,6 +15,8 @@ from common import *  # noqa: E402,F401,F403
 
 SRC = "typhoon-ai/typhoon-s-instruct-post-training"
 KEEP = set(os.environ.get("KEEP", "autoif,tool").split(","))
+THAI_ONLY_AUTOIF = os.environ.get("THAI_ONLY_AUTOIF", "1") == "1"   # only ~39% of AutoIF rows are Thai (D.md)
+_THAI = re.compile(r"[\u0E00-\u0E7F]")
 
 
 def convert(row):
@@ -23,6 +25,8 @@ def convert(row):
     if "all" not in KEEP and not ((is_tool and "tool" in KEEP) or (is_autoif and "autoif" in KEEP)):
         return None
     msgs = [generic_message(m) for m in loads_maybe(row["messages"])]
+    if is_autoif and THAI_ONLY_AUTOIF and not any(_THAI.search(m["content"]) for m in msgs if m["role"] == "user"):
+        return None
     gold = None
     if is_tool:
         gold = {"subset": row["subset_name"], "target_tools": row.get("target_tools"),

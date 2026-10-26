@@ -1,6 +1,7 @@
 """PersonalAILab/TaskCraft (MIT): ~41k agentic QA (web/PDF/image) with golden_answer, hop count and a reference
 agent trace (search/browse actions + observations, from the authors' agent) and agent/LLM answer scores.
 FILTER: drop rows mentioning Wikipedia (~1% per C.md) and non-text modalities (observation_images).
+Works on both the HF viewer rows and the raw `pure_qa.jsonl` file (query, golden_answer, valid_hop, tool, domain).
 Default prompt-only; USE_TRACE=1 converts the reference trace into tool-call turns (no reasoning; answer from the agent).
 """
 import json
@@ -30,7 +31,9 @@ def convert(row):
             msgs.append({"role": "tool", "name": a["tool_name"], "content": str(a.get("observation") or "")})
         msgs.append({"role": "assistant", "content": agent.get("answer") or ""})
     tools = infer_tools_from_calls(msgs) if USE_TRACE else None
-    return record(msgs, tools, SRC, {"answer": row.get("golden_answer"), "hops": row.get("search_agent_actions_times"),
+    return record(msgs, tools, SRC, {"answer": row.get("golden_answer"),
+                                     "hops": row.get("valid_hop", row.get("search_agent_actions_times")),
+                                     "tool": row.get("tool"), "domain": row.get("domain"),
                                      "agent_score": (row.get("score") or {}).get("agent_answer_score")})
 
 

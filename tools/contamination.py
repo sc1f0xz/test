@@ -2,6 +2,8 @@
 
     python3 tools/contamination.py build [--cache DIR] [--only gsm8k,humaneval,...]
     python3 tools/contamination.py scan FILE.jsonl [FILE2 ...] [--cache DIR] [--jaccard 0.5] [--containment 0.8]
+    python3 tools/contamination.py filter IN.jsonl OUT.jsonl [--cache DIR] [--jaccard 0.5] [--containment 0.8]
+        (writes only rows NOT flagged; prints counts and the dropped benchmark matches to stderr)
 
 Method
   * normalise: NFKC, lowercase, keep word chars (Thai/Latin/digits) -> tokens
@@ -208,6 +210,44 @@ def text_units(row) -> list[str]:
     return units
 
 
+def row_hits(row, idx, jac_t: float, cont_t: float) -> list[dict]:
+    hits = []
+    for u in text_units(row) + [json.dumps(row, ensure_ascii=False)]:
+        A = shingles(u)
+        if not A:
+            continue
+        cands = defaultdict(int)
+        for s in A:
+            for k in idx["inv"].get(s, ()):
+                cands[k] += 1
+        for k, inter in cands.items():
+            B = idx["sh"][k]
+            jac, cont = inter / (len(A) + len(B) - inter), inter / len(B)
+            if jac >= jac_t or cont >= cont_t:
+                hits.append({"bench": idx["items"][k][0], "bench_item": idx["items"][k][1],
+                             "jaccard": round(jac, 3), "containment": round(cont, 3)})
+    return hits
+
+
+def filter_file(inp: str, out: str, cache: str, jac_t: float, cont_t: float):
+    idx = load_index(cache)
+    n = kept = 0
+    by_bench = defaultdict(int)
+    with open(out, "w", encoding="utf-8") as fo:
+        for line in open(inp, encoding="utf-8"):
+            if not line.strip():
+                continue
+            n += 1
+            hits = row_hits(json.loads(line), idx, jac_t, cont_t)
+            if hits:
+                for b in {h["bench"] for h in hits}:
+                    by_bench[b] += 1
+                continue
+            kept += 1
+            fo.write(line if line.endswith("\n") else line + "\n")
+    print(json.dumps({"in": n, "kept": kept, "dropped": n - kept, "dropped_by_benchmark": dict(by_bench)}), file=sys.stderr)
+
+
 def scan(files: list[str], cache: str, jac_t: float, cont_t: float):
     idx = load_index(cache)
     summary = {}
@@ -246,7 +286,7 @@ def scan(files: list[str], cache: str, jac_t: float, cont_t: float):
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("cmd", choices=["build", "scan"])
+    ap.add_argument("cmd", choices=["build", "scan", "filter"])
     ap.add_argument("files", nargs="*")
     ap.add_argument("--cache", default=os.path.expanduser("~/.cache/contam_bench"))
     ap.add_argument("--only", default="")
@@ -255,5 +295,7 @@ if __name__ == "__main__":
     a = ap.parse_args()
     if a.cmd == "build":
         build(a.cache, [x for x in a.only.split(",") if x] or None)
+    elif a.cmd == "filter":
+        filter_file(a.files[0], a.files[1], a.cache, a.jaccard, a.containment)
     else:
         scan(a.files, a.cache, a.jaccard, a.containment)

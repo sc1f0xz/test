@@ -13,7 +13,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from common import *  # noqa: E402,F401,F403
 
-SRC = "open-athena/nemotron-code-oracle-filtered-qwen3.5-122b-131k-opencode-traces"
+SRC = os.environ.get("SRC", "open-athena/nemotron-code-oracle-filtered-qwen3.5-122b-131k-opencode-traces")  # set SRC=open-athena/<sibling repo> when reusing
 KEEP_FAILED = os.environ.get("KEEP_FAILED") == "1"
 
 
