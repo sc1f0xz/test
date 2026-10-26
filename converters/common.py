@@ -193,7 +193,33 @@ def validate_record(rec: dict) -> list[str]:
             errs.append(f"tools invalid: {e}")
     if not rec.get("src"):
         errs.append("src empty")
+    if any(isinstance(m.get("content"), str) and "<image>" in m["content"] for m in msgs):
+        errs.append("literal <image> in content (not an image token for Qwen3.5; use meta.images)")
     return errs
+
+
+IMAGE_PLACEHOLDER_RE = re.compile(r"<image>\s*")
+
+
+def multimodal_messages(rec: dict, style: str = "hf", image_urls: list[str] | None = None) -> list[dict]:
+    """Records keep `content` as plain text; images live in rec["meta"]["images"] (refs, in order) and belong to the
+    FIRST user message. This builds the content-list form the model actually needs:
+      style="hf"     -> [{"type":"image"}, ..., {"type":"text","text":...}]   (Qwen3.5 chat template / processor;
+                        the template renders each as <|vision_start|><|image_pad|><|vision_end|>)
+      style="openai" -> [{"type":"image_url","image_url":{"url":u}}, ..., {"type":"text",...}]  (vLLM / llama-server;
+                        pass image_urls = data: URLs or http URLs, same order as meta.images)
+    A literal "<image>" string is NOT an image for Qwen3.5 (it is just text) - never put it in content."""
+    images = ((rec.get("meta") or {}).get("images")) or []
+    msgs = [dict(m) for m in rec["messages"]]
+    if not images:
+        return msgs
+    if style == "openai" and (image_urls is None or len(image_urls) != len(images)):
+        raise ValueError("style='openai' needs one url per meta.images entry")
+    i = next(k for k, m in enumerate(msgs) if m["role"] == "user")
+    parts = ([{"type": "image"} for _ in images] if style == "hf"
+             else [{"type": "image_url", "image_url": {"url": u}} for u in image_urls])
+    msgs[i]["content"] = parts + [{"type": "text", "text": msgs[i]["content"]}]
+    return msgs
 
 
 def iter_rows(path: str | None):

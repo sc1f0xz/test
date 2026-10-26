@@ -1,5 +1,6 @@
 """vinod-anbalagan/chart-reasoning-verified (CC-BY-4.0): programmatically generated charts with verified answers,
-evidence values and abstention cases. Image referenced via meta.images (repo images/<id>.png).
+evidence values and abstention cases. Image referenced via meta.images (repo images/<id>.png); any "<image>"
+placeholder in the raw prompt is removed (use common.multimodal_messages() to attach the real image).
 'completion' is a short structured answer (Answer/Evidence/Reasoning) — no thinking -> prompt-only by default.
 """
 import ast
@@ -17,7 +18,7 @@ USE_COMPLETION = os.environ.get("USE_COMPLETION") == "1"
 
 def convert(row):
     q = row.get("prompt") or row["question"]
-    msgs = [{"role": "user", "content": f"<image>\n{q}" if "<image>" not in q else q}]
+    msgs = [{"role": "user", "content": IMAGE_PLACEHOLDER_RE.sub("", q).strip()}]
     if USE_COMPLETION:
         msgs.append(assistant_msg(row["completion"]))
     rec = record(msgs, None, f"{SRC}#{row.get('id')}",
