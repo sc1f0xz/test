@@ -84,7 +84,7 @@ python3 tools/contamination.py scan out.jsonl [more.jsonl] --cache ~/.cache/cont
 | translated benchmark ภาษาไทย (`iapp/openai_humaneval-th`, `typhoon-ai/ifeval-th`, `iapp/math-500-th`, `aime_2024-th`, `livecodebench-th`) | HumanEval / IFEval / MATH / AIME / LCB | เป็นตัว benchmark เองที่แปลแล้ว | ห้ามใช้เทรน (8-gram จับข้ามภาษาไม่ได้) |
 
 ## 4. ขั้นตอนที่แนะนำก่อนเทรนจริง
-1. แปลงทุกชุดด้วย `converters/` ก่อน แล้วรัน `scan` กับไฟล์ output **ทั้งชุด** (ใน sandbox สแกนได้ประมาณ 300 แถวต่อวินาทีต่อ core)
+1. แปลงทุกชุดด้วย `converters/` ก่อน แล้วรัน `scan` กับไฟล์ output **ทั้งชุด** (ใน sandbox สแกน 298 แถวตัวอย่างพร้อมสร้าง index ใช้เวลาประมาณ 9 วินาที สำหรับชุดใหญ่ควรแบ่งไฟล์แล้วรันขนานกัน)
 2. ตัดแถวที่ Jaccard ≥ 0.5 **หรือ** containment ≥ 0.8 ทิ้ง แล้วเก็บรายชื่อแถวที่ตัดไว้ตรวจย้อน
 3. ชุดภาษาไทยที่แปลมา ให้ตรวจเพิ่มด้วย embedding similarity (เช่น multilingual-e5) เทียบกับ benchmark ฉบับภาษาอังกฤษ
 4. ถ้าต้องการวัดด้วย GAIA ให้ขอสิทธิ์ gated แล้วเพิ่ม loader ใน `BENCHMARKS`
