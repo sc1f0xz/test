@@ -69,7 +69,7 @@ cd ~/work && uv tool install mini-swe-agent    # หรือ: pip install mini-
 export MSWEA_COST_TRACKING="ignore_errors"     # โมเดล local ไม่มีราคา [ตรวจแล้ว จาก docs/models/local_models.md]
 ```
 
-**ไฟล์ config ของโมเดล** (คัดลอกจาก `src/minisweagent/config/benchmarks/swebench.yaml` แล้วแก้ส่วน `model:`) **[ตรวจแล้ว จาก docs/models/local_models.md]**
+**ไฟล์ config ของโมเดล** `my_model.yaml` (มีแค่ส่วน `model:`) **[ตรวจแล้วกับซอร์ส mini-swe-agent 2.4.6]**
 ```yaml
 model:
   model_name: "hosted_vllm/teacher"          # ต้องตรงกับ --served-model-name
@@ -78,12 +78,16 @@ model:
   cost_tracking: "ignore_errors"
 ```
 
-**รัน 20 โจทย์แรกจาก repo เดียว** **[ตรวจแล้ว: ตัวเลือก CLI จาก src/minisweagent/run/benchmarks/swebench.py]**
+**รัน 20 โจทย์แรกจาก repo เดียว** **[ตรวจแล้ว: ตัวเลือก CLI จาก src/minisweagent/run/benchmarks/swebench.py ของ 2.4.6]**
 ```bash
 mini-extra swebench --subset smith --split train \
   --filter '^oauthlib__oauthlib' --slice 0:20 \
-  -w 3 -c my_swebench.yaml -o runs/pilot1
+  -w 3 -c swebench.yaml -c my_model.yaml -c agent.step_limit=40 -o runs/pilot1
 ```
+- ⚠️ **ต้องใส่ `-c swebench.yaml` ก่อนเสมอ**: ถ้าใช้ `-c` เมื่อไร config เริ่มต้นจะไม่ถูกโหลด (help ของโปรแกรมเขียนไว้ชัด) ถ้าใส่แค่ `-c my_model.yaml` agent จะไม่มี prompt/template ของงาน SWE เลย · หลาย `-c` จะถูก merge ตามลำดับ
+- `agent.step_limit=40`: ค่าเริ่มต้นคือ 250 step ซึ่งยาวเกินที่จะใส่ใน 16K token ได้อยู่แล้ว (trace SWE ของ Open-SWE ที่ resolved มีความยาวกลางๆ ~29K token) ตั้งต่ำไว้เพื่อไม่เปลือง GPU กับเส้นที่ใช้ไม่ได้ ปรับตามผล pilot
+- mini-swe-agent 2.x ใช้ **tool call `bash` แบบ native** (ไม่ใช่ข้อความ) ข้อความของ prompt บอกให้เขียน THOUGHT ใน content ด้วย
+- ✅ **เช็คหลังโจทย์แรกเสร็จ (สำคัญ):** เปิด `runs/pilot1/<instance>/<instance>.traj.json` ดูว่า message ของ assistant มี `reasoning_content` ที่ไม่ว่าง (agent เก็บ `message.model_dump()` ของ litellm ทั้งก้อน) ถ้าว่างทุก turn = thinking ไม่ถูกส่งต่อมา (เช็ค `--reasoning-parser` ของ vLLM / เวอร์ชัน litellm) **ห้ามสร้างต่อจนกว่าจะแก้ได้** ไม่อย่างนั้นได้ข้อมูลที่สอนว่า "ไม่ต้องคิด" · `tools/convert_minisweagent.py` จะเตือนให้อัตโนมัติ
 - `--subset smith` = HF `SWE-bench/SWE-smith` (ในโค้ดมี `"smith": "SWE-bench/SWE-smith"`) · ในชุดมีคอลัมน์ `image_name` อยู่แล้ว เช่น `jyangballin/swesmith.x86_64.oauthlib_1776_oauthlib.1fd52536` (1 image ต่อ repo จึงประหยัดดิสก์)
 - `-w 3` = รันพร้อมกัน 3 งาน (เหมาะกับ CPU 6 core) ถ้าเครื่องยังลื่นค่อยเพิ่มเป็น 4
 - ผลอยู่ใน `runs/pilot1/` (trajectory + `preds.json`)
@@ -101,23 +105,38 @@ python -m swesmith.harness.eval --dataset_path <ไฟล์ task ของ repo
 - RAM/CPU ของ PC ตอนรัน 3 งานพร้อมกัน และดิสก์ที่ image ใช้
 - หลังเสร็จรัน `docker image prune -a` เพื่อคืนพื้นที่
 
-**แปลงผลเป็นข้อมูลเทรน**: ใช้ `tools/filter_swe_trajectories.py` เป็นต้นแบบ (ตอนนี้รองรับ schema ของ OpenHands/nebius) สำหรับ trajectory ของ mini-swe-agent ต้องเขียนตัวแปลงเพิ่ม **[ยังไม่มี]** · เกณฑ์เหมือนเดิม: ผ่าน test, ทำบั๊กให้เกิดซ้ำก่อนแก้, เลือกเส้นที่สั้นที่สุด, ยาวไม่เกิน 16K
+**แปลงผลเป็นข้อมูลเทรน** **[มีแล้ว + มี unit test]**
+```bash
+python3 tools/convert_minisweagent.py data/swe_pilot1.jsonl runs/pilot1 [runs/pilot2 ...] --resolved <report ของ harness>
+python3 tools/render_chat.py tools/qwen3_5_chat_template.jinja data/swe_pilot1.jsonl data/swe_pilot1.r.jsonl \
+  --require-think --tokenizer <path>/tokenizer.json --max-tokens 16384
+```
+- คัดเฉพาะ: `exit_status == Submitted` + resolved ตาม report ของ harness + ไม่มี format error (ข้อความ user แทรกกลางทาง) + **เลือกเส้นสั้นที่สุดต่อโจทย์** (ข้ามหลาย run ได้) · ความยาวคุมด้วย `--max-tokens` ของ render_chat
+- `--resolved` รับไฟล์ JSON ที่มี key ซึ่งมีคำว่า resolved และเป็น list ของ id (เช่น `resolved_ids`) หรือ `{id: {"resolved": true}}` หรือไฟล์ข้อความ id ละบรรทัด **[ยังไม่ได้เทียบกับไฟล์ report จริงของ swesmith: เปิดดูไฟล์ก่อนแล้วปรับถ้าจำเป็น]**
+- เกณฑ์ "ทำบั๊กให้เกิดซ้ำก่อนแก้" ยังไม่ได้ใส่ในตัวแปลงนี้ (มีใน `tools/filter_swe_trajectories.py` สำหรับ schema OpenHands) ถ้าอยากใช้ให้ยก `RUN_CHECK`/`TEST_PATH` จากไฟล์นั้นมาใช้
 
 ## 4. เตรียมข้อมูล (ทำบนเครื่องไหนก็ได้ที่มีพื้นที่ดิสก์)
 
-1. ดาวน์โหลดตาม `TOP_DOWNLOAD_LIST.md` (มีคำสั่ง `huggingface-cli download … --include` ครบ ประมาณ 4.5 GB)
+1. ดาวน์โหลดตาม `TOP_DOWNLOAD_LIST.md` (มีคำสั่ง `hf download … --include` ครบ ประมาณ 4.5 GB) **[ตรวจแล้ว: ทั้ง 31 คำสั่งผ่าน `--dry-run` กับ huggingface_hub 2.3.0]** · `huggingface-cli` ใช้ไม่ได้แล้วในเวอร์ชันใหม่
 2. **ดูบทบาทของแต่ละชุดใน `converters/registry.json` ก่อน**
    - `sft` = เทรนตรงได้
    - `prompt_only` = ใช้แค่ prompt + เฉลย แล้วสร้างคำตอบใหม่ (ขั้น 5)
    - `dpo` = เป็นคู่ chosen/rejected
    - `style` = มีการคิดแต่ไม่มีตัวตรวจ ใช้แค่ส่วนน้อย
+   - `exclude` = **ห้ามใช้ในรอบนี้** (เหตุผลอยู่ใน `note`): open-athena-131k (ไม่มี prompt ของโจทย์), ledger KPI-QA (ยาวเกิน 16K ทุกแถว)
+   - ช่อง `render` = flag ที่ต้องใช้กับ `tools/render_chat.py` ของชุดนั้น (เช่น tmax-sft / zake7749 ใช้ `--mask-nothink`)
    - **ห้ามเอา output ของชุด `prompt_only` ไปเทรน SFT ตรงๆ** เพราะคำตอบเดิมไม่มีการคิด
-3. รัน converter ได้กับ `.jsonl`, `.json` (array) และ `.parquet` โดยตรง (`.parquet` ต้องมี pandas + pyarrow) **[ทดสอบแล้วกับไฟล์จริง 6 ชุด: 0 error]**
+3. รัน converter ได้กับ `.jsonl`, `.json` (array) และ `.parquet` โดยตรง (`.parquet` ต้องมี pandas + pyarrow) **[ทดสอบแล้วกับแถวจริงที่ไม่ถูกตัด 30 แถวต่อชุด × 38 ชุด: 0 error]**
    ```bash
    python3 converters/<ชื่อชุด>.py <ไฟล์ดิบ> > data/<ชื่อชุด>.jsonl
    python3 converters/test_converters.py     # ต้องผ่าน 40/40 (registry checked)
    ```
-   - ชุดตระกูล open-athena ตัวอื่นใช้ converter เดียวกันได้ โดยตั้ง `SRC=open-athena/<ชื่อ repo>`
+   - ชุดตระกูล open-athena ตัวอื่นใช้ converter เดียวกันได้ โดยตั้ง `SRC=open-athena/<ชื่อ repo>` **แต่ต้องเช็คก่อนว่า user turn แรกมีโจทย์จริง** (ในชุด `*-131k-opencode-traces` user turn แรกว่างทุกแถว และ `instruction` คือคำตอบสุดท้ายของโมเดล ไม่ใช่โจทย์ converter จะข้ามแถวพวกนี้ให้เอง)
+   - ⚠️ **test_converters ใช้ `samples/` ที่ถูกตัดสั้น ผ่านแล้วไม่ได้แปลว่าใช้กับข้อมูลจริงได้** หลังดาวน์โหลดให้รันทั้ง pipeline กับไฟล์จริงด้วย (ตั้งชื่อไฟล์ดิบเป็น `<ชื่อ converter>.jsonl|.json|.parquet` ไว้ในโฟลเดอร์เดียว):
+     ```bash
+     python3 tools/pipeline_check.py <โฟลเดอร์ไฟล์ดิบ> <โฟลเดอร์ผลลัพธ์> --tokenizer <path>/tokenizer.json --max-tokens 16384
+     ```
+     ตารางที่ได้ = จำนวนแถว → record → ตัวอย่างที่เทรนได้, turn ที่ไม่มีการคิด, ตัวอย่างที่ยาวเกิน, token median/max · ผลกับแถวจริง 30 แถวต่อชุด (audit 2) อยู่ใน `OPEN_QUESTIONS.md` ข้อ ข.
 4. **ตรวจปน benchmark ด้วยไฟล์ทั้งชุด** (การสุ่มไม่พอ ดู `CONTAMINATION.md` §3.4)
    ```bash
    python3 tools/contamination.py build
@@ -161,7 +180,7 @@ model = FastLanguageModel.get_peft_model(
 - ตัวอย่างของ Unsloth ใส่แค่ q/k/v/o + MLP ซึ่ง**ไม่ได้แตะ 24 ชั้น DeltaNet** (ชื่อโมดูลตรวจจาก `model.safetensors.index.json` จริงแล้ว) ให้ทำ ablation ทั้งสองแบบ
 - ตรวจด้วยว่า LoRA ไม่ลามไปที่ vision tower หรือ `mtp.*` (พิมพ์ `model.print_trainable_parameters()` แล้วดูรายชื่อโมดูล)
 - `SFTConfig`: `per_device_train_batch_size=1`, `gradient_accumulation_steps` ให้ได้ effective batch ประมาณ 32, `learning_rate=1e-4` (sweep 5e-5 / 1e-4 / 2e-4), `num_train_epochs=1–2`, `optim="adamw_8bit"`
-- **เรนเดอร์ข้อมูลด้วย chat template ทางการ (ไฟล์อยู่ที่ `tools/qwen3_5_chat_template.jinja`) ผ่าน `tools/render_chat.py`** **[ทดสอบแล้ว: 40 ชุด 0 error]**
+- **เรนเดอร์ข้อมูลด้วย chat template ทางการ (ไฟล์อยู่ที่ `tools/qwen3_5_chat_template.jinja`) ผ่าน `tools/render_chat.py`** **[ทดสอบแล้ว: แถวจริง 38 ชุด 0 render error (audit 2)]**
   ```bash
   python3 tools/render_chat.py tools/qwen3_5_chat_template.jinja data/X.clean.jsonl data/X.train.jsonl \
       --require-think --tokenizer <path>/tokenizer.json --max-tokens 16384
@@ -169,6 +188,8 @@ model = FastLanguageModel.get_peft_model(
   - **แยกบทสนทนาหลาย user turn เป็นหลายตัวอย่าง** เพราะ template แสดง `<think>` เฉพาะ assistant turn หลัง user ล่าสุด ถ้าคิด loss กับ turn ก่อนหน้า จะสอนให้ "ตอบโดยไม่คิด"
   - output มี `text` + `train_spans` (ช่วงตัวอักษรของ assistant turn ที่ต้องคิด loss) → **คิด loss เฉพาะในช่วงนี้** ส่วน system/user/tool output ให้ mask ออก
   - `--require-think` ตัดตัวอย่างที่ turn ที่เทรนมี `<think>` ว่าง (template จะใส่ `<think>\n\n</think>` ว่างให้เสมอ ซึ่งสอนให้ไม่คิด)
+  - `--mask-nothink` (ใช้แทน `--require-think` กับ trace agent ที่บาง step ไม่มีการคิด) เก็บตัวอย่างไว้แต่ไม่คิด loss กับ turn ที่ `<think>` ว่าง · tmax-sft: `--require-think` เหลือ 10/33 ตัวอย่าง, `--mask-nothink` เหลือ 30 (เทรน 301 turn) · ใช้ flag ตามช่อง `render` ใน registry
+  - record ที่มี `meta.images` จะถูกแปลงเป็น `{"type":"image"}` → `<|vision_start|><|image_pad|><|vision_end|>` และมีช่อง `images` ใน output **รันเทรนแบบข้อความล้วน (FastLanguageModel) ใช้ข้อมูลภาพไม่ได้ ให้ตัดชุดภาพออก** ถ้าจะเทรนภาพต้องแยกรอบด้วย VLM collator (ยังไม่ได้ทำ ดู §9)
   - `--tokenizer --max-tokens` นับ token จริง (`pip install tokenizers`) · วัดได้ว่า**ภาษาไทยใช้ประมาณ 2.6 ตัวอักษรต่อ token ส่วนอังกฤษและโค้ดใช้ประมาณ 4** งบ 16K จึงใส่ข้อความไทยได้น้อยกว่า
 - **packing:** ถ้าเปิด ต้องทดสอบก่อนว่า loss ของ batch ที่ pack เท่ากับ batch ที่ไม่ pack (`BEST_PRACTICES.md` §A1)
 - ก่อนเทรนจริง: รัน 100 step ที่ 16K เพื่อดูว่า VRAM พอ **[ยังไม่ได้ทดสอบ]**
@@ -187,6 +208,7 @@ python convert_hf_to_gguf.py merged --outfile model-bf16.gguf --outtype bf16
   --temp 1.0 --top-p 0.95 --top-k 20 --presence-penalty 1.5
 ```
 - llama.cpp รองรับ arch `qwen35` และ parse tool call แบบ XML ของ Qwen3.5 ได้ **[ตรวจแล้ว: llama-arch.cpp / chat.cpp]**
+- **ภาพ:** ถ้าเทรนแบบข้อความล้วน vision tower ไม่ถูกแตะ ให้ใช้ไฟล์ `mmproj-F16.gguf` เดิมจาก [unsloth/Qwen3.5-4B-GGUF](https://huggingface.co/unsloth/Qwen3.5-4B-GGUF) คู่กับโมเดลที่เทรน: `./llama-server -m model-Q5_K_M.gguf --mmproj mmproj-F16.gguf ...` **[ตรวจแล้ว: มีไฟล์ mmproj ใน repo และ convert_hf_to_gguf.py ของ llama.cpp รองรับทั้ง `Qwen3_5ForCausalLM` และ `Qwen3_5ForConditionalGeneration`] [ยังไม่ได้ลองกับภาพจริง: ทดสอบ 1 ภาพหลังแปลง]** · ห้ามเทรน `embed_tokens` / `lm_head` ถ้าอยากให้ mmproj เดิมใช้ได้
 - **ต้องใช้ `--jinja`** · ตรวจว่าการคิดเปิดอยู่ (GGUF ขนาดเล็กของ Unsloth ปิดการคิดไว้เป็นค่าเริ่มต้น ถ้าจำเป็นให้เพิ่ม `--chat-template-kwargs '{"enable_thinking":true}'`)
 - **วัดผลซ้ำบนไฟล์ GGUF** ด้วย (§8) เพราะ quantize อาจทำให้ผลลดลง
 
@@ -200,7 +222,8 @@ python convert_hf_to_gguf.py merged --outfile model-bf16.gguf --outtype bf16
 
 ## 9. งานที่ยังไม่ได้ทำ (ให้ agent ทำต่อ)
 1. สคริปต์ขั้น 5 (นักเรียนตอบก่อน → ตัวตรวจ → ครูตอบเฉพาะข้อที่ไม่ผ่าน)
-2. ตัวแปลง trajectory ของ mini-swe-agent ให้เป็นรูปแบบ record ของเรา
+2. ~~ตัวแปลง trajectory ของ mini-swe-agent~~ **ทำแล้ว** (`tools/convert_minisweagent.py`) เหลือเทียบรูปแบบไฟล์ report ของ swesmith จริง
 3. แปลง `train_spans` (ช่วงตัวอักษร) เป็น label mask ระดับ token ใน trainer (ใช้ `return_offsets_mapping` ของ tokenizer) และเทียบ token ที่เรนเดอร์กับ prompt ที่ llama.cpp / vLLM สร้างจริงอย่างน้อย 1 ตัวอย่าง
 4. ตัวตรวจ prompt injection ที่เช็คว่างานเดิมทำเสร็จด้วย
 5. ค้างจากทีม: แปลโจทย์เป็นไทยได้ไหม · รูปแบบข้อมูลภาพของ pipeline เทรน (`OPEN_QUESTIONS.md`)
+6. ถ้าจะใช้ชุดภาพ (Thai-Synth-Receipts, chart-reasoning): รอบเทรนแยกด้วย Unsloth `FastVisionModel` + collator ที่โหลดภาพตามช่อง `images` (record ใช้ `converters/common.py: multimodal_messages()` ได้ทั้งแบบ HF และแบบ OpenAI API สำหรับส่งให้ครู)

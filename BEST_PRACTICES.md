@@ -239,3 +239,7 @@
 5. ☐ ตั้ง control ของ RL: run ที่ใช้ reward สุ่มหรือ format-only คู่ไปกับ run จริงอย่างน้อย 1 ครั้ง
 6. ☐ สร้างข้อมูลด้วยครู: `preserve_thinking=False` สำหรับบทสนทนาหลายรอบ แล้วตรวจว่าไม่มีข้อความ "Reasoning effort is set to" หลุดเข้าไปในข้อมูลของนักเรียน
 7. ☐ ตรวจคุณภาพภาษาไทยของครูด้วยมือ 50–100 ตัวอย่าง (ภาษาปน, ความถูกต้อง) ก่อนสร้างข้อมูลจำนวนมาก
+8. ☐ หลังดาวน์โหลดไฟล์จริง รัน `tools/pipeline_check.py` (converter → template ทางการ → tokenizer จริง) กับทุกชุด และดูว่าตัวเลขใกล้กับตารางใน `OPEN_QUESTIONS.md` (audit 2) · **test ด้วย `samples/` อย่างเดียวไม่พอ** เพราะ samples ถูกตัดความยาว ปัญหา 6 ข้อใน audit 2 จับได้จากแถวจริงเท่านั้น
+9. ☐ ใช้เฉพาะชุดที่ `role` ใน `converters/registry.json` ไม่ใช่ `exclude` และ render ด้วย flag ในช่อง `render` (เช่น `--mask-nothink` ของ tmax-sft)
+10. ☐ ตรวจว่าข้อมูล agent ทุกชุดเรียก tool แบบ native (`<tool_call><function=…>` หลังเรนเดอร์) และผลของ tool อยู่ใน role `tool` ไม่ใช่ `user` (ยกเว้น Terminus-2 ของ open-athena 32k ที่ตั้งใจเก็บไว้เป็นส่วนน้อย)
+11. ☐ รอบเทรนข้อความล้วนต้องไม่มี record ที่มี `meta.images` (ชุดภาพต้องแยกรอบ) และตอนรันบน llama.cpp ใช้ `mmproj` เดิมของ Qwen3.5-4B
