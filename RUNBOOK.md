@@ -106,18 +106,25 @@ python -m swesmith.harness.eval --dataset_path <ไฟล์ task ของ repo
 ## 4. เตรียมข้อมูล (ทำบนเครื่องไหนก็ได้ที่มีพื้นที่ดิสก์)
 
 1. ดาวน์โหลดตาม `TOP_DOWNLOAD_LIST.md` (มีคำสั่ง `huggingface-cli download … --include` ครบ ประมาณ 4.5 GB)
-2. แปลง parquet → jsonl แล้วรัน converter:
+2. **ดูบทบาทของแต่ละชุดใน `converters/registry.json` ก่อน**
+   - `sft` = เทรนตรงได้
+   - `prompt_only` = ใช้แค่ prompt + เฉลย แล้วสร้างคำตอบใหม่ (ขั้น 5)
+   - `dpo` = เป็นคู่ chosen/rejected
+   - `style` = มีการคิดแต่ไม่มีตัวตรวจ ใช้แค่ส่วนน้อย
+   - **ห้ามเอา output ของชุด `prompt_only` ไปเทรน SFT ตรงๆ** เพราะคำตอบเดิมไม่มีการคิด
+3. รัน converter ได้กับ `.jsonl`, `.json` (array) และ `.parquet` โดยตรง (`.parquet` ต้องมี pandas + pyarrow) **[ทดสอบแล้วกับไฟล์จริง 6 ชุด: 0 error]**
    ```bash
-   python3 converters/<ชื่อชุด>.py in.jsonl > data/<ชื่อชุด>.jsonl
-   python3 converters/test_converters.py     # ต้องผ่าน 40/40
+   python3 converters/<ชื่อชุด>.py <ไฟล์ดิบ> > data/<ชื่อชุด>.jsonl
+   python3 converters/test_converters.py     # ต้องผ่าน 40/40 (registry checked)
    ```
-3. ตรวจปน benchmark:
+   - ชุดตระกูล open-athena ตัวอื่นใช้ converter เดียวกันได้ โดยตั้ง `SRC=open-athena/<ชื่อ repo>`
+4. **ตรวจปน benchmark ด้วยไฟล์ทั้งชุด** (การสุ่มไม่พอ ดู `CONTAMINATION.md` §3.4)
    ```bash
    python3 tools/contamination.py build
-   python3 tools/contamination.py scan data/*.jsonl > contamination_report.json
+   python3 tools/contamination.py filter data/<ชื่อชุด>.jsonl data/<ชื่อชุด>.clean.jsonl
    ```
-   ตัดแถวที่ Jaccard ≥ 0.5 หรือ containment ≥ 0.8 ออก (`CONTAMINATION.md`)
-4. **ห้ามใช้:** split test ของ When2Call / WangchanX-Legal / DataMind · ThaiExam-onet · ชุด benchmark ที่แปลเป็นไทย (ดูรายชื่อใน `CONTAMINATION.md` §3.3)
+5. **ห้ามใช้:** split test ของ When2Call / WangchanX-Legal / DataMind · ThaiExam-onet · ชุด benchmark ที่แปลเป็นไทย (`CONTAMINATION.md` §3.3)
+6. **When2Call train_sft ไม่มีตัวอย่างที่เรียก tool เลย** (no_tool_call 7,890 / ถามกลับ 7,110) ต้องผสมกับชุดที่มี tool call ที่ถูก (zake7749, Synth-APIGen, Seal-Tools ฯลฯ) ไม่งั้นโมเดลจะไม่ยอมเรียก tool
 
 ## 5. สร้างคำตอบ (นักเรียนก่อน ครูทีหลัง) **[ยังไม่มีสคริปต์ → งานถัดไป]**
 
@@ -154,7 +161,15 @@ model = FastLanguageModel.get_peft_model(
 - ตัวอย่างของ Unsloth ใส่แค่ q/k/v/o + MLP ซึ่ง**ไม่ได้แตะ 24 ชั้น DeltaNet** (ชื่อโมดูลตรวจจาก `model.safetensors.index.json` จริงแล้ว) ให้ทำ ablation ทั้งสองแบบ
 - ตรวจด้วยว่า LoRA ไม่ลามไปที่ vision tower หรือ `mtp.*` (พิมพ์ `model.print_trainable_parameters()` แล้วดูรายชื่อโมดูล)
 - `SFTConfig`: `per_device_train_batch_size=1`, `gradient_accumulation_steps` ให้ได้ effective batch ประมาณ 32, `learning_rate=1e-4` (sweep 5e-5 / 1e-4 / 2e-4), `num_train_epochs=1–2`, `optim="adamw_8bit"`
-- **เรนเดอร์ข้อมูลด้วย `tokenizer.apply_chat_template(messages, tools=json.loads(rec["tools"]))` ของ Qwen3.5-4B เท่านั้น** (template จะจัดการ reasoning ของ turn เก่าเอง)
+- **เรนเดอร์ข้อมูลด้วย chat template ทางการ (ไฟล์อยู่ที่ `tools/qwen3_5_chat_template.jinja`) ผ่าน `tools/render_chat.py`** **[ทดสอบแล้ว: 40 ชุด 0 error]**
+  ```bash
+  python3 tools/render_chat.py tools/qwen3_5_chat_template.jinja data/X.clean.jsonl data/X.train.jsonl \
+      --require-think --tokenizer <path>/tokenizer.json --max-tokens 16384
+  ```
+  - **แยกบทสนทนาหลาย user turn เป็นหลายตัวอย่าง** เพราะ template แสดง `<think>` เฉพาะ assistant turn หลัง user ล่าสุด ถ้าคิด loss กับ turn ก่อนหน้า จะสอนให้ "ตอบโดยไม่คิด"
+  - output มี `text` + `train_spans` (ช่วงตัวอักษรของ assistant turn ที่ต้องคิด loss) → **คิด loss เฉพาะในช่วงนี้** ส่วน system/user/tool output ให้ mask ออก
+  - `--require-think` ตัดตัวอย่างที่ turn ที่เทรนมี `<think>` ว่าง (template จะใส่ `<think>\n\n</think>` ว่างให้เสมอ ซึ่งสอนให้ไม่คิด)
+  - `--tokenizer --max-tokens` นับ token จริง (`pip install tokenizers`) · วัดได้ว่า**ภาษาไทยใช้ประมาณ 2.6 ตัวอักษรต่อ token ส่วนอังกฤษและโค้ดใช้ประมาณ 4** งบ 16K จึงใส่ข้อความไทยได้น้อยกว่า
 - **packing:** ถ้าเปิด ต้องทดสอบก่อนว่า loss ของ batch ที่ pack เท่ากับ batch ที่ไม่ pack (`BEST_PRACTICES.md` §A1)
 - ก่อนเทรนจริง: รัน 100 step ที่ 16K เพื่อดูว่า VRAM พอ **[ยังไม่ได้ทดสอบ]**
 - เซฟ checkpoint ถี่ๆ แล้วเลือกจากผลวัดใน §8 ไม่ใช่เลือก checkpoint สุดท้ายเสมอ
@@ -186,6 +201,6 @@ python convert_hf_to_gguf.py merged --outfile model-bf16.gguf --outtype bf16
 ## 9. งานที่ยังไม่ได้ทำ (ให้ agent ทำต่อ)
 1. สคริปต์ขั้น 5 (นักเรียนตอบก่อน → ตัวตรวจ → ครูตอบเฉพาะข้อที่ไม่ผ่าน)
 2. ตัวแปลง trajectory ของ mini-swe-agent ให้เป็นรูปแบบ record ของเรา
-3. สคริปต์เรนเดอร์ด้วย chat template แล้วเทียบ token กับ llama.cpp / vLLM
+3. แปลง `train_spans` (ช่วงตัวอักษร) เป็น label mask ระดับ token ใน trainer (ใช้ `return_offsets_mapping` ของ tokenizer) และเทียบ token ที่เรนเดอร์กับ prompt ที่ llama.cpp / vLLM สร้างจริงอย่างน้อย 1 ตัวอย่าง
 4. ตัวตรวจ prompt injection ที่เช็คว่างานเดิมทำเสร็จด้วย
 5. ค้างจากทีม: แปลโจทย์เป็นไทยได้ไหม · รูปแบบข้อมูลภาพของ pipeline เทรน (`OPEN_QUESTIONS.md`)

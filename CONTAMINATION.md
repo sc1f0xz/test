@@ -83,8 +83,25 @@ python3 tools/contamination.py scan out.jsonl [more.jsonl] --cache ~/.cache/cont
 | OptimalThinkingBench (ครึ่งยาก) | reasoning-gym | ครึ่งยากสร้างจาก reasoning-gym (หมวด K) | ถ้าเทรนด้วย reasoning-gym ให้ใช้เฉพาะครึ่งง่ายเป็นชุดวัด |
 | translated benchmark ภาษาไทย (`iapp/openai_humaneval-th`, `typhoon-ai/ifeval-th`, `iapp/math-500-th`, `aime_2024-th`, `livecodebench-th`) | HumanEval / IFEval / MATH / AIME / LCB | เป็นตัว benchmark เองที่แปลแล้ว | ห้ามใช้เทรน (8-gram จับข้ามภาษาไม่ได้) |
 
+### 3.4 สแกนไฟล์จริงทั้งชุด (2026-10-26 รอบ audit) — **เจอปนจริงที่การสุ่ม 300 แถวพลาดไป**
+ใช้ไฟล์ดิบจาก HF ทั้งไฟล์ → converter → `tools/contamination.py filter`
+
+| ชุด | แถว | ตัดออก | ปนกับ | หมายเหตุ |
+|---|---|---|---|---|
+| agentica-org/DeepScaleR-Preview-Dataset | 40,315 | **93 (0.23%)** | **MMLU-Pro test** (Jaccard 1.0 ซ้ำทั้งข้อ) | ต้องรัน filter ก่อนใช้ทุกครั้ง |
+| MadeAgents/xlam-irrelevance-7.5k | 7,500 | **6** | **BFCL v3** (มี Jaccard 1.0) | |
+| nvidia/When2Call train_sft | 15,000 | **4** | BFCL v3 (containment 1.0) | ส่วน train แทบสะอาด ส่วน test ปน 65% |
+| PersonalAILab/TaskCraft (pure_qa) | 40,444 | 0 | — | หลัง converter ตัด wiki 1.1% |
+| callanwu/WebWalkerQA (silver) | 13,579 | 0 | — | |
+| nvidia/Nemotron-RL-knowledge-web_search-mcqa | 2,929 | 0 | — | |
+
+**บทเรียน:** การสุ่ม 300 แถวไม่พอ **ต้องรัน `filter` กับทุกไฟล์ทั้งชุดก่อนเทรนเสมอ**
+```bash
+python3 tools/contamination.py filter data/X.jsonl data/X.clean.jsonl
+```
+
 ## 4. ขั้นตอนที่แนะนำก่อนเทรนจริง
 1. แปลงทุกชุดด้วย `converters/` ก่อน แล้วรัน `scan` กับไฟล์ output **ทั้งชุด** (ใน sandbox สแกน 298 แถวตัวอย่างพร้อมสร้าง index ใช้เวลาประมาณ 9 วินาที สำหรับชุดใหญ่ควรแบ่งไฟล์แล้วรันขนานกัน)
-2. ตัดแถวที่ Jaccard ≥ 0.5 **หรือ** containment ≥ 0.8 ทิ้ง แล้วเก็บรายชื่อแถวที่ตัดไว้ตรวจย้อน
+2. ใช้คำสั่ง `filter` (ตัดแถวที่ Jaccard ≥ 0.5 **หรือ** containment ≥ 0.8 อัตโนมัติ และพิมพ์จำนวนที่ตัดแยกตาม benchmark)
 3. ชุดภาษาไทยที่แปลมา ให้ตรวจเพิ่มด้วย embedding similarity (เช่น multilingual-e5) เทียบกับ benchmark ฉบับภาษาอังกฤษ
 4. ถ้าต้องการวัดด้วย GAIA ให้ขอสิทธิ์ gated แล้วเพิ่ม loader ใน `BENCHMARKS`

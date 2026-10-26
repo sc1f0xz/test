@@ -17,6 +17,12 @@
 | เทรนบน 4090 ได้ไหม | ได้ (2060 ใช้รันอย่างเดียว) | BEST_PRACTICES §G |
 | สเปกเครื่องของทีมสำหรับรัน Docker | Windows 11 · RAM 32 GB · ดิสก์ว่างมาก · i5-9600K (6C/6T) | **พอสำหรับ pilot**: Docker Desktop + WSL2, `.wslconfig` memory=24GB processors=6, รันพร้อมกันเริ่มที่ 3 container, เก็บงานไว้ในไฟล์ระบบของ WSL (BEST_PRACTICES §G) |
 
+## ✅ แก้แล้วในรอบ audit (2026-10-26)
+- รูปแบบการเรนเดอร์: `tools/render_chat.py` ใช้ template ทางการ + แยกตาม user turn + `--require-think` (ทดสอบแล้วกับ 40 ชุด)
+- ไฟล์ JSON array (xlam-irrelevance, DeepScaleR) และ parquet ใช้กับ converter ได้แล้ว
+- TaskCraft `pure_qa.jsonl` ใช้ชื่อคอลัมน์ต่างจาก viewer แก้ converter แล้ว (ทดสอบกับไฟล์จริง 40,910 แถว)
+- ปนจริงที่เจอเพิ่ม: DeepScaleR 93 แถวซ้ำ MMLU-Pro · xlam-irrelevance 6 แถว · When2Call train 4 แถว → มีคำสั่ง `filter` แล้ว
+
 ## ก. ต้องตัดสินใจ (ฉบับเดิม)
 
 1. **ใช้ข้อมูลที่ไม่มีใบอนุญาตได้หรือไม่ (วิจัยเท่านั้น หรือเชิงพาณิชย์)**
