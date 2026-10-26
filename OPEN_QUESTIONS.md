@@ -5,7 +5,7 @@
 ## ก. ต้องตัดสินใจ
 
 1. **ใช้ข้อมูลที่ไม่มีใบอนุญาตได้หรือไม่ (วิจัยเท่านั้น หรือเชิงพาณิชย์)**
-   - ชุดอันดับต้นหลายชุดไม่มี license บนการ์ด: กลุ่ม open-athena `*-qwen3.5-122b-*` (~100 repo), zake7749/Qwen3.6-35B-A3B-Tool-Calling, zake7749/Qwen-3.6-plus…, PrimeIntellect/INTELLECT-3-RL, PrimeIntellect/SYNTHETIC-2-RL, Skywork/Skywork-OR1-RL-Data, ThaiLLM/med-tool-use (+med-iq), thavens/Qwen3-14B-secalign-tools, JWei05/swe_smith_*, FineEnvs Qwen3.8 rollouts, artillerywu/DeepResearch-9K, Tongyi-Zhiwen/DocQA-RL-1.6K, iapp/Thai-R1-Distill-SFT
+   - ชุดอันดับต้นหลายชุดไม่มี license บนการ์ด: กลุ่ม open-athena `*-qwen3.5-122b-*` (~100 repo), zake7749/Qwen3.6-35B-A3B-Tool-Calling, zake7749/Qwen-3.6-plus…, PrimeIntellect/INTELLECT-3-RL, PrimeIntellect/SYNTHETIC-2-RL, Skywork/Skywork-OR1-RL-Data, ThaiLLM/med-tool-use (+med-iq), thavens/Qwen3-14B-secalign-tools, JWei05/swe_smith_*, FineEnvs Qwen3.8 rollouts, artillerywu/DeepResearch-9K (และสร้างจาก HotpotQA/2Wiki/MuSiQue 100% = wiki → ตัดออก), Tongyi-Zhiwen/DocQA-RL-1.6K, iapp/Thai-R1-Distill-SFT
    - ชุดที่เป็น **NC (ห้ามใช้เชิงพาณิชย์)**: KodCode (ทั้ง V1 และ Light-RL), Salesforce/APIGen-MT-5k, CohereLabs/tiny-aya-l2-thinker, miromind MiroVerse, Cognitive-Lab/NayanaOCR, OptimalThinkingBench (eval)
    - **GPL-3.0**: HuggingFaceM4/ChartQA
    - ถ้าคำตอบคือ "เชิงพาณิชย์" ต้องเปลี่ยนชุดเหล่านี้ใน TOP 30: #3 → nvidia/Nemotron-RL-math-OpenMathReasoning, #5 → When2Call + Synth-APIGen ให้ครูสร้างคำตอบใหม่, #15/#16 → allenai/tmax-sft + TMax-15K, #23 → Nemotron-RL competitive coding (ไฟล์ใหญ่)

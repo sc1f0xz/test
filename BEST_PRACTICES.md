@@ -130,9 +130,51 @@
 
 ---
 
-## D. รายการตรวจก่อนเริ่มเทรน (ทำได้ภายใน 1 วัน)
+## D. Coding / debugging agent แบบ OpenHands (เพิ่ม 2026-10-26)
+
+**ข้อเท็จจริงก่อน:** OpenHands เป็น scaffold ที่ "Use with any LLM" ([README](https://github.com/OpenHands/OpenHands)) ความเก่งส่วนใหญ่มาจาก LLM ที่ต่ออยู่ สิ่งที่ scaffold เพิ่มให้ และมีหลักฐานว่าช่วยจริง มีดังนี้
+
+| ปฏิบัติ | ผลที่รายงาน | ขนาด | แหล่ง |
+|---|---|---|---|
+| ให้ action เป็นโค้ด/bash ที่รันได้จริง (CodeAct) แทน JSON ที่จำกัดรูปแบบ | success สูงขึ้นถึง 20% (ทดสอบกับ 17 LLM) | หลายขนาด | [2402.01030](https://arxiv.org/abs/2402.01030) |
+| interface ที่ออกแบบให้ agent ใช้ (ACI): แก้ไฟล์ด้วย `str_replace`, ดูไฟล์เป็นช่วง, รัน test | ดีกว่ากรณีที่ไม่มี interface อย่างชัดเจน | GPT-4 class | [SWE-agent 2405.15793](https://arxiv.org/abs/2405.15793) |
+| **ขั้นตอนบังคับใน prompt:** สำรวจ → **สร้างสคริปต์ทำให้บั๊กเกิดซ้ำก่อนแก้** → แก้ให้น้อยที่สุด → รันสคริปต์และ test เดิม → ทบทวน · ถ้าแก้ไม่ผ่านหลายรอบ ให้ไล่ 5–7 สาเหตุที่เป็นไปได้ | — (เป็น prompt ไม่ใช่ผลทดลอง) | — | system prompt จริงใน trajectory ของ [nvidia/SWE-Hero](https://huggingface.co/datasets/nvidia/SWE-Hero-openhands-trajectories) |
+| เทรนเฉพาะ trajectory ที่**แก้สำเร็จจริง** ใน environment ที่รันได้ | OpenHands LM 32B: 37.2% บน SWE-bench Verified · SWE-Gym: +19% | 32B | [blog](https://www.openhands.dev/blog/introducing-openhands-lm-32b-a-strong-open-coding-agent-model) · [2412.21139](https://arxiv.org/abs/2412.21139) |
+| ตอนใช้งาน: รันหลายครั้ง → ตัด patch ที่ test ไม่ผ่าน → ให้ critic เลือก | 60.6% → 66.4% (5 รอบ) · critic Best@8 73.8 vs สุ่ม 57.9 | — | [blog](https://openhands.dev/blog/sota-on-swe-bench-verified-with-inference-time-scaling-and-critic-model) · [blog 2026](https://openhands.dev/blog/20260305-learning-to-verify-ai-generated-code) |
+| **โมเดล 4B ทำได้จริง** เมื่อใช้ trajectory ที่คัดแล้ว (เน้นเส้นทางที่สั้นที่สุด) ตามด้วย RL | SWE-Master-4B: SFT ≈27%, SFT+RL ≈33% · SWE-TRACE (Qwen3-4B) ดีกว่านั้น | **[ใกล้ 4B]** | [SWE-TRACE 2604.14820](https://arxiv.org/abs/2604.14820) (ตัวเลขจากตารางในเปเปอร์) |
+| Qwen3.5-4B ตัวตั้งต้นทำ SWE ได้อยู่แล้ว | การ์ดของบุคคลที่สามรายงาน 44.8% → 55.0% หลัง full-FT ด้วย 3,093 trajectory **(รายงานเอง ไม่มีคนยืนยัน)** | [ใกล้ 4B] | [AxiaoDBL/qwen3.5-4b-swebench-sft](https://huggingface.co/AxiaoDBL/qwen3.5-4b-swebench-sft) |
+
+**ผลจากการวัดข้อมูลจริงของเรา** (`tools/filter_swe_trajectories.py` บน 120 แถวจาก 3 ช่วงของ nebius/SWE-rebench-openhands)
+- resolved 52% · ผ่านทุกเงื่อนไข (resolved + มี test ที่ทำบั๊กเกิดซ้ำได้จริง `gen_tests_correct ≥ 1` + workflow ทำบั๊กเกิดซ้ำก่อนแก้ และยืนยันหลังแก้) **ประมาณ 5%**
+- **trajectory ที่ผ่าน มีความยาวมัธยฐานประมาณ 111 turn ≈ 26–40K token แม้ตัด tool output เหลือ 300–2,500 ตัวอักษร** จึง**ไม่มีเส้นไหนพอ 16K**
+- **97% ของ assistant turn ไม่มี reasoning** (Qwen3-Coder เป็นโมเดลที่ไม่มี thinking) ถ้าใช้ตรงจะขัดกับกติกา "คิดเสมอ"
+- **ข้อสรุป:** ชุดนี้ใช้เป็น **prompt + environment** (instance_id → Docker image ของ nebius/SWE-rebench) ให้นักเรียนหรือครูสร้าง trajectory ใหม่ที่สั้นและมีการคิด จะเหมาะกว่าใช้ตรง หรือถ้าจะใช้ตรงต้องเพิ่ม context ของส่วน SWE เป็น 32–64K
+
+## E. ภาษาของข้อมูลเทรน (เพิ่ม 2026-10-26)
+- **ต้องมีภาษาไทยใน SFT** เพราะการ์ด Typhoon-S ระบุว่า target-language supervision จำเป็นใน SFT · สูตร OPD ของ Typhoon-S (บน Qwen3-4B/8B) ใช้ Tulu (อังกฤษ) 100k + Thai AutoIF 40k + tool 20k (≈25% ไทย) โดย**ลดฝั่งอังกฤษแต่เก็บภาษาไทยไว้ครบ** [ใกล้ 4B] [2601.18129](https://arxiv.org/abs/2601.18129) · [การ์ดชุดข้อมูล](https://huggingface.co/datasets/typhoon-ai/typhoon-s-instruct-post-training)
+- **ทักษะโค้ด, tool และ debug ให้เรียนจากข้อมูลอังกฤษเป็นหลัก** เพราะ error message, เอกสาร และข้อมูลที่มีตัวตรวจเกือบทั้งหมดเป็นภาษาอังกฤษ [ความเห็น]
+- **ไม่บังคับให้คิดเป็นภาษาไทย** (ส่วน B) ให้ตอบเป็นไทยเมื่อผู้ใช้ถามเป็นไทย
+- ข้อเสนอเริ่มต้น: ภาษาไทยประมาณ 20–30% ของ token SFT [ความเห็น ยึดตาม Typhoon-S] แล้ววัด ThaiExam (ไม่รวม onet) เทียบกับชุดภาษาอังกฤษเพื่อปรับสัดส่วน
+
+## F. ครู Qwen3.8-27B: ข้อเท็จจริงที่ตรวจแล้ว และวิธีใช้ที่ถูกต้อง (เพิ่ม 2026-10-26)
+
+**ตรวจจากไฟล์จริงบน HF** (`config.json`, `tokenizer.json`, `chat_template.jinja`, `README.md`)
+- ใบอนุญาต **Apache-2.0** ไม่ gated · สถาปัตยกรรมเดียวกับนักเรียน (`Qwen3_5ForConditionalGeneration`, hybrid 48 linear + 16 full attention เทียบกับนักเรียน 24 + 8) · เป็น image-text-to-text เหมือนกัน
+- **tokenizer: vocab และ merges ตรงกันทุกตัว** (vocab_size 248,320 ทั้งคู่) ต่างกันแค่ครูมี special token เสียงเพิ่ม 7 ตัว (id 248070–248076) → **ทำ logit / on-policy distillation ได้** (ต้อง mask 7 id นี้ออก)
+- **chat template ต่างกัน 3 จุดที่มีผลกับข้อมูลเทรน:**
+  1. **`reasoning_effort`** (`xhigh` ค่าเริ่มต้น / `medium` / `low`) template จะ**แทรกข้อความกำกับลงใน system prompt** ("Reasoning effort is set to …") → ข้อความนี้**ห้ามติดไปในข้อมูลของนักเรียน** (template ของนักเรียนไม่มี) ให้เก็บแค่ messages แล้วเรนเดอร์ใหม่ด้วย template ของนักเรียน
+  2. **`preserve_thinking` เปิดเป็นค่าเริ่มต้น** (ครูเห็น reasoning เก่าทั้งหมด) ส่วนนักเรียนตัด reasoning ของ turn ก่อนข้อความผู้ใช้ล่าสุด → **ตอนครูสร้างบทสนทนาหลายรอบ ให้ตั้ง `preserve_thinking=False`** เพื่อให้ครูเห็น context เท่ากับที่นักเรียนจะเห็น ไม่งั้นคำตอบอาจอ้างถึงสิ่งที่นักเรียนไม่เคยเห็น
+  3. การเรนเดอร์ค่า arguments ต่างกันเล็กน้อย → เก็บ arguments เป็น dict แล้วให้ template ของนักเรียนเรนเดอร์
+- sampling ที่การ์ดแนะนำในโหมด thinking: `T=1.0, top_p=0.95, top_k=20, presence_penalty=0.0` (นักเรียน 3.5 ใช้ 1.5)
+- **`reasoning_effort` ใช้เป็นตัวควบคุมความยาวสำหรับหมวด adaptive length ได้ทันที**: สร้างที่ low / medium / xhigh แล้วเลือกคำตอบที่ถูกจากระดับต่ำสุด **แต่การ์ดเตือนเองว่างาน agent หลายรอบ effort ต่ำอาจทำให้ล้มเหลวและต้องลองซ้ำมากขึ้น** จึงไม่ควรใช้ low เป็นค่าเริ่มต้นกับงาน agent
+
+---
+
+## G. รายการตรวจก่อนเริ่มเทรน (ทำได้ภายใน 1 วัน)
 1. ☐ เรนเดอร์ converter output ผ่าน `chat_template.jinja` แล้วเทียบ token กับ output ของ vLLM (`--reasoning-parser qwen3 --tool-call-parser qwen3_coder`) ว่าตรงกัน
 2. ☐ ทดสอบ packing: loss ของ batch ที่ pack = loss ของ batch ที่ไม่ pack (ไม่งั้นปิด packing)
 3. ☐ วัด baseline ของ Qwen3.5-4B: ความแม่น, จำนวน thinking token ต่อถังความยาก, BFCL-style, When2Call (ส่วนที่ไม่ได้มาจาก BFCL), ThaiExam (ไม่รวม onet), RULER 16K
 4. ☐ LoRA 100 step บน GPU จริง ที่ความยาว 16K และ target รวมชั้น DeltaNet แล้วดูว่า memory และ throughput ใช้ได้
 5. ☐ ตั้ง control ของ RL: run ที่ใช้ reward สุ่มหรือ format-only คู่ไปกับ run จริงอย่างน้อย 1 ครั้ง
+6. ☐ สร้างข้อมูลด้วยครู: `preserve_thinking=False` สำหรับบทสนทนาหลายรอบ แล้วตรวจว่าไม่มีข้อความ "Reasoning effort is set to" หลุดเข้าไปในข้อมูลของนักเรียน
+7. ☐ ตรวจคุณภาพภาษาไทยของครูด้วยมือ 50–100 ตัวอย่าง (ภาษาปน, ความถูกต้อง) ก่อนสร้างข้อมูลจำนวนมาก
