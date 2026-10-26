@@ -197,6 +197,13 @@
 **แผนทดลองแรก (pilot):** mini-swe-agent (`uvx mini-swe-agent`) + โจทย์ SWE-smith 20–50 ข้อจาก 2–3 repo → ชี้ไปที่ vLLM บน 4090 ผ่าน SSH tunnel → ดูว่ารันพร้อมกันได้กี่ container → ลบ image ที่ใช้เสร็จแล้วด้วย `docker image prune`
 ถ้าเครื่องไม่พอ ให้เช่า VPS ที่ใช้แค่ CPU แทน (ไม่ต้องมี GPU)
 
+**เครื่องของทีมจริง (Windows 11, RAM 32 GB, i5-9600K 6C/6T):** พอสำหรับ pilot
+- Docker Desktop + WSL2 และเปิด virtualization ใน BIOS
+- `.wslconfig`: `memory=24GB`, `processors=6` แล้ว `wsl --shutdown`
+- ย้ายที่เก็บข้อมูลของ Docker ไปไดรฟ์ที่มีพื้นที่ว่าง
+- รันงานในไฟล์ระบบของ WSL (ไม่ใช่ `/mnt/c`)
+- เริ่มที่ 3 container พร้อมกัน (CPU เป็นคอขวด)
+
 **ข้อควรระวังตอนนำไปใช้กับ llama.cpp**
 1. เปิด `--jinja` เพื่อให้ใช้ chat template ที่ฝังใน GGUF (จำเป็นทั้งต่อ tool call และ thinking)
 2. **GGUF ขนาดเล็กของ Unsloth ปิด thinking เป็นค่าเริ่มต้น** ("For Qwen3.5 0.8B, 2B, 4B and 9B, reasoning is disabled by default" → เปิดด้วย `--chat-template-kwargs '{"enable_thinking":true}'`) ([Unsloth](https://unsloth.ai/docs/models/qwen3.5.md)) · ตอนแปลงโมเดลของเราเป็น GGUF ให้ฝัง chat template ทางการที่คิดเป็นค่าเริ่มต้น แล้วเช็คด้วยตัวเองว่าเปิดอยู่
