@@ -182,6 +182,21 @@
 | **รันครู Qwen3.8-27B** | 4090 24GB | ✅ ต้องใช้ 4-bit | GGUF UD-Q4_K_M 16.5 GB ([unsloth/Qwen3.8-27B-GGUF](https://huggingface.co/unsloth/Qwen3.8-27B-GGUF)) หรือ AWQ-INT4 บน vLLM (เร็วกว่าเมื่อสร้างข้อมูลจำนวนมาก) · FP8 (≥27 GB) ต้องใช้ 4090 2 ใบ · quantize แล้วคุณภาพลดลงบ้าง แต่มีตัวตรวจกรองอยู่แล้ว |
 | **environment SWE / terminal (Docker)** | 4090 ที่เช่าจาก RunPod / Vast | ❌ **ใช้ Docker ซ้อนใน pod ไม่ได้** | RunPod: "you cannot spin up your own Docker instance" ([docs](https://docs.runpod.io/pods/overview)) · Vast: "Docker-in-Docker is disabled" ([FAQ](https://docs.vast.ai/documentation/reference/faq/technical)) → **ทางออก:** ให้ GPU ที่เช่าเปิด API ของโมเดล (vLLM / llama-server) แล้วรัน container ของ task บนเครื่องอื่นที่มี Docker (เครื่องของทีม หรือ VPS ราคาถูกที่ใช้ CPU และมีดิสก์เยอะ) container เหล่านี้ไม่ต้องใช้ GPU |
 
+**สรุปการแบ่งงานตามเครื่อง**
+- **4090 ที่เช่า:** เทรน LoRA (bf16 + `use_gradient_checkpointing="unsloth"` + batch 1) และเปิด API ของโมเดล (vLLM) ให้ครูหรือนักเรียนสร้างข้อมูล
+- **2060 ของทีม:** ใช้งานโมเดลที่เสร็จแล้วด้วย llama.cpp และรัน **container ของโจทย์ SWE/terminal** (ใช้แค่ CPU, RAM และดิสก์ การ์ดจอไม่เกี่ยว)
+
+**เครื่องที่ใช้รัน container ของโจทย์ (เครื่องของทีมหรือ VPS ที่ใช้แค่ CPU)**
+| สิ่งที่ต้องมี | ขั้นต่ำที่แนะนำ | ที่มา |
+|---|---|---|
+| OS | Linux (หรือ Windows + Docker Desktop + WSL2) | image ของ SWE-bench / SWE-smith เป็น Linux x86 |
+| ดิสก์ว่าง | ≥ 100 GB สำหรับเริ่มต้น | R2E-Gym: 300–500 MB ต่อโจทย์ · SWE-smith: 1 image ต่อ repo (ประหยัดกว่า) |
+| RAM | ≥ 16 GB (รันพร้อมกัน 2–4 container) | [ความเห็น: ประมาณ 1–2 GB ต่อ container ยังไม่ได้วัด] |
+| CPU | ≥ 4 core | ใช้ตอนรัน test |
+
+**แผนทดลองแรก (pilot):** mini-swe-agent (`uvx mini-swe-agent`) + โจทย์ SWE-smith 20–50 ข้อจาก 2–3 repo → ชี้ไปที่ vLLM บน 4090 ผ่าน SSH tunnel → ดูว่ารันพร้อมกันได้กี่ container → ลบ image ที่ใช้เสร็จแล้วด้วย `docker image prune`
+ถ้าเครื่องไม่พอ ให้เช่า VPS ที่ใช้แค่ CPU แทน (ไม่ต้องมี GPU)
+
 **ข้อควรระวังตอนนำไปใช้กับ llama.cpp**
 1. เปิด `--jinja` เพื่อให้ใช้ chat template ที่ฝังใน GGUF (จำเป็นทั้งต่อ tool call และ thinking)
 2. **GGUF ขนาดเล็กของ Unsloth ปิด thinking เป็นค่าเริ่มต้น** ("For Qwen3.5 0.8B, 2B, 4B and 9B, reasoning is disabled by default" → เปิดด้วย `--chat-template-kwargs '{"enable_thinking":true}'`) ([Unsloth](https://unsloth.ai/docs/models/qwen3.5.md)) · ตอนแปลงโมเดลของเราเป็น GGUF ให้ฝัง chat template ทางการที่คิดเป็นค่าเริ่มต้น แล้วเช็คด้วยตัวเองว่าเปิดอยู่
