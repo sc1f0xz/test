@@ -108,7 +108,7 @@ def norm_tool_schema(t: Any) -> dict:
         f = t["function"]
     else:
         f = t
-    params = loads_maybe(f.get("parameters", {"type": "object", "properties": {}}))
+    params = fix_schema(f.get("parameters", {"type": "object", "properties": {}}))
     return {"type": "function", "function": {"name": f["name"], "description": f.get("description", ""),
                                              "parameters": params}}
 
@@ -219,3 +219,83 @@ def main(convert: Callable[[dict], Any], argv: list[str] | None = None) -> None:
             n_out += 1
             sys.stdout.write(json.dumps(rec, ensure_ascii=False) + "\n")
     print(f"[{n_in} in, {n_out} out, {n_bad} skipped]", file=sys.stderr)
+
+
+# --- schema helpers -------------------------------------------------------
+_PY_TYPES = {"str": "string", "string": "string", "int": "integer", "integer": "integer", "float": "number",
+             "number": "number", "bool": "boolean", "boolean": "boolean", "dict": "object", "object": "object",
+             "list": "array", "array": "array", "tuple": "array", "set": "array"}
+
+
+def json_type(t: Any) -> dict:
+    """Map loose type strings ('str, optional', 'List[int]', 'dict') to a JSON-schema fragment."""
+    if not isinstance(t, str):
+        return {}
+    s = t.strip().lower().replace(", optional", "").replace(" optional", "")
+    m = re.match(r"(list|array|set|tuple)\[(.+)\]$", s)
+    if m:
+        inner = json_type(m.group(2))
+        return {"type": "array", **({"items": inner} if inner else {})}
+    if "|" in s or "union" in s or s in ("any", ""):
+        return {}
+    return {"type": _PY_TYPES[s]} if s in _PY_TYPES else {}
+
+
+def fix_schema(params: Any) -> dict:
+    """Normalise loose parameter specs into JSON Schema.
+
+    Handles (a) proper JSON schema with python-ish types ('dict','str'),
+    (b) xLAM style {param: {type, description, default}} without 'properties'."""
+    params = loads_maybe(params) or {}
+    if not isinstance(params, dict):
+        return {"type": "object", "properties": {}}
+    if "properties" not in params and params.get("type") not in ("object", "dict"):
+        props, required = {}, []
+        for k, spec in params.items():
+            spec = spec if isinstance(spec, dict) else {"description": str(spec)}
+            p = {**json_type(spec.get("type")), "description": spec.get("description", "")}
+            if "enum" in spec:
+                p["enum"] = spec["enum"]
+            props[k] = p
+            if "default" not in spec and "optional" not in str(spec.get("type", "")).lower():
+                required.append(k)
+        return {"type": "object", "properties": props, "required": required}
+
+    def walk(node):
+        if isinstance(node, dict):
+            node = dict(node)
+            if isinstance(node.get("type"), str) and node["type"].lower() in _PY_TYPES:
+                node["type"] = _PY_TYPES[node["type"].lower()]
+            for k in ("properties",):
+                if isinstance(node.get(k), dict):
+                    node[k] = {pk: walk(pv) for pk, pv in node[k].items()}
+            if "items" in node:
+                node["items"] = walk(node["items"])
+            return node
+        return node
+
+    out = walk(params)
+    out["type"] = "object"
+    return out
+
+
+def tool(name: str, description: str = "", parameters: Any = None) -> dict:
+    return {"type": "function", "function": {"name": name, "description": description,
+                                             "parameters": fix_schema(parameters or {})}}
+
+
+def infer_tools_from_calls(messages: list[dict]) -> list[dict]:
+    """Build minimal schemas when a dataset doesn't ship tool definitions."""
+    seen: dict[str, dict] = {}
+    for m in messages:
+        for c in m.get("tool_calls", []) or []:
+            f = c["function"]
+            props = seen.setdefault(f["name"], {})
+            for k, v in f["arguments"].items():
+                t = ("boolean" if isinstance(v, bool) else "integer" if isinstance(v, int) else
+                     "number" if isinstance(v, float) else "array" if isinstance(v, list) else
+                     "object" if isinstance(v, dict) else "string")
+                props.setdefault(k, {"type": t})
+    return [{"type": "function", "function": {"name": n, "description": "(schema inferred from observed calls)",
+                                              "parameters": {"type": "object", "properties": p}}}
+            for n, p in seen.items()]
