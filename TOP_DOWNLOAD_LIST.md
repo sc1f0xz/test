@@ -57,7 +57,7 @@
 | wannaphong/thai-magpie-qwen3-think | `data/train-*.parquet` | 208.1 | trace การคิดเป็นภาษาไทย (Qwen3-32B) ไม่มีตัวตรวจ |
 | DuckerMaster/Thai-Synth-Receipts | `train/metadata.jsonl`, `train/clean/json/*`, `train/clean/images/TH-*-0000[0-9]*` | 134.5 (ทั้งชุด 1,820) | VLM ภาษาไทยที่มี gold ทุกฟิลด์ |
 | vinod-anbalagan/chart-reasoning-verified | `train.jsonl`, `images/*` | 95.3 | chart QA ที่ตรวจได้ CC-BY-4.0 |
-| artefactory/ledger-long-context-KPI-QA | `no_eval/data-0000[0-3]-of-*.parquet` | 49.9 | long-context เฉลยเป็นตัวเลขจาก XBRL |
+| ~~artefactory/ledger-long-context-KPI-QA~~ | `no_eval/data-0000[0-3]-of-*.parquet` | 49.9 | **ตัดออกสำหรับรอบ 16K (audit 2)**: รายงานยาว ~215K ตัวอักษรทุกแถว (เกิน 16K token มาก) qrels ไม่ครบ (9/30 แถวไม่มี) และเฉลยมาจาก yfinance ไม่ใช่จากตัวรายงาน |
 | leapeto/tokenskip-math-qwen3-4b-thinking-n8 | `original/math_raw_original_shard00of04.jsonl`, `scores/scores_ratio_0.5.jsonl` | 387.3 | ความยากที่วัดจาก Qwen3-4B-Thinking (ไม่มีแถวตัวอย่าง เพราะ viewer error 500) |
 | PrimeIntellect/SYNTHETIC-2-RL | `data/*.parquet` | 1191.8 | ต้องตัด `ifeval_*` ออก ไม่มี license |
 | nvidia/Nemotron-Math-v2 | `data/low.parquet` | 3119.8 | pass rate แยกตาม effort ไฟล์ใหญ่ ถ้าต้องการถูกลงให้ใช้ #3/#4 แทน |
