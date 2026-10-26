@@ -63,6 +63,42 @@ class T(unittest.TestCase):
             self.assertEqual(len(got), 2)
             self.assertEqual(json.loads(r.stderr.strip().splitlines()[-1])["trained_turns_without_thinking"], 1)
 
+    def test_cli_mask_nothink_keeps_sample_without_empty_turn_loss(self):
+        agent = [
+            {"role": "user", "content": "weather in Bangkok?"},
+            {"role": "assistant", "content": "", "tool_calls": [{"type": "function", "function": {"name": "get_weather", "arguments": {"city": "Bangkok"}}}]},
+            {"role": "tool", "content": "33C"},
+            {"role": "assistant", "content": "It is 33C.", "reasoning_content": "answer"},
+        ]
+        rec = {"messages": agent, "tools": json.dumps(TOOLS), "src": "t#4", "gold": None}
+        with tempfile.TemporaryDirectory() as d:
+            inp, out = os.path.join(d, "in.jsonl"), os.path.join(d, "out.jsonl")
+            open(inp, "w").write(json.dumps(rec) + "\n")
+            for flag, n_samples in (("--require-think", 0), ("--mask-nothink", 1)):
+                r = subprocess.run([sys.executable, os.path.join(ROOT, "tools", "render_chat.py"), TPL, inp, out, flag],
+                                   capture_output=True, text=True)
+                self.assertEqual(r.returncode, 0, r.stderr)
+                got = [json.loads(l) for l in open(out)]
+                self.assertEqual(len(got), n_samples, flag)
+            (s, e), = got[0]["train_spans"]   # only the turn WITH thinking is trained
+            self.assertIn("It is 33C.", got[0]["text"][s:e])
+            self.assertTrue(R.has_thinking(got[0]["text"][s:e]))
+
+    def test_images_render_as_vision_tokens(self):
+        rec = {"messages": [{"role": "user", "content": "read this receipt"},
+                            {"role": "assistant", "content": "{}", "reasoning_content": "look"}],
+               "tools": "[]", "src": "t#5", "gold": None, "meta": {"images": ["img1"]}}
+        with tempfile.TemporaryDirectory() as d:
+            inp, out = os.path.join(d, "in.jsonl"), os.path.join(d, "out.jsonl")
+            open(inp, "w").write(json.dumps(rec) + "\n")
+            r = subprocess.run([sys.executable, os.path.join(ROOT, "tools", "render_chat.py"), TPL, inp, out, "--require-think"],
+                               capture_output=True, text=True)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            got = json.loads(open(out).readline())
+            self.assertIn("<|vision_start|><|image_pad|><|vision_end|>read this receipt", got["text"])
+            self.assertEqual(got["images"], ["img1"])
+            self.assertNotIn("<image>", got["text"])
+
 
 if __name__ == "__main__":
     unittest.main()
