@@ -33,7 +33,9 @@ def _norm_row(row):
     return tuple(round(v, 6) if isinstance(v, float) else v for v in row)
 
 
-def check(pred_sql: str, gold_sql: str, db_path: str) -> dict:
+def check(pred_sql: str, gold_sql: str, db_path: str, allow_empty_gold: bool = False) -> dict:
+    """Execution match. A gold query with an EMPTY result cannot tell right from wrong (any query that returns
+    nothing would "pass"), so it is reported as not ok unless allow_empty_gold=True."""
     pred_sql = re.sub(r"^```(?:sql)?|```$", "", pred_sql.strip(), flags=re.I | re.M).strip()
     if _WRITE.search(pred_sql):
         return {"ok": False, "error": "write/DDL statement rejected"}
@@ -41,7 +43,12 @@ def check(pred_sql: str, gold_sql: str, db_path: str) -> dict:
         p = _exec(pred_sql, db_path)
     except Exception as e:
         return {"ok": False, "error": f"pred: {e}"}
-    g = _exec(gold_sql, db_path)
+    try:
+        g = _exec(gold_sql, db_path)
+    except Exception as e:
+        return {"ok": False, "error": f"gold: {e}"}
+    if not g and not allow_empty_gold:
+        return {"ok": False, "error": "gold result empty (uninformative; drop this item)"}
     if re.search(r"\border\s+by\b", gold_sql, re.I):
         ok = [_norm_row(r) for r in p] == [_norm_row(r) for r in g]
     else:

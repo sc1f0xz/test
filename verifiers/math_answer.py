@@ -62,9 +62,12 @@ _REPL = [
 
 def normalize(s: str) -> str:
     s = s.strip()
+    # a whole-answer \text{..}/\mathrm{..} IS the answer (e.g. \text{Monday}); only unit suffixes get dropped below
+    s = re.sub(r"^\\(?:text|mathrm|textbf)\{([^{}]*)\}$", r"\1", s)
     for a, b in _REPL:
         s = re.sub(a, b, s)
     s = s.rstrip(".")
+    s = re.sub(r"^\(([A-J])\)$", r"\1", s)           # (B) -> B  (multiple choice)
     s = re.sub(r"^(x|y|n|k|a|ans)=", "", s)
     s = re.sub(r"(?<=\d),(?=\d{3}\b)", "", s)  # 1,000 -> 1000
     return s
@@ -87,6 +90,8 @@ def is_equivalent(pred: str | None, gold: str) -> bool:
     if pred is None:
         return False
     p, g = normalize(pred), normalize(gold)
+    if not p or not g:  # nothing left to compare (empty box, or only units/formatting) -> never a match
+        return False
     if p == g:
         return True
     fp, fg = _to_fraction(p), _to_fraction(g)

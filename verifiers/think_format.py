@@ -22,6 +22,10 @@ _XML_PARAM = re.compile(r"<parameter=([^>\s]+)>\s*(.*?)\s*</parameter>", re.S)
 def _parse_call(body: str):
     m = _XML_FN.search(body)
     if m:
+        # every byte inside <function=...> must belong to a closed <parameter=...>...</parameter> block;
+        # otherwise llama.cpp / vLLM parsers reject or mis-parse the call (e.g. a missing </parameter>)
+        if _XML_PARAM.sub("", m.group(2)).strip() or body[m.end():].strip():
+            raise ValueError("malformed <parameter> block or text after </function>")
         args = {}
         for k, v in _XML_PARAM.findall(m.group(2)):
             try:

@@ -104,6 +104,15 @@ class TestMath(unittest.TestCase):
         self.assertTrue(math_answer.check("ดังนั้น คำตอบคือ 7", "7")["ok"])
         self.assertTrue(math_answer.check(r"\boxed{(2, 1)}", "(1,2)")["ok"])
 
+    def test_text_answers_no_false_positive(self):
+        # regression (audit 2): \text{..} was stripped to "" on both sides -> any two text answers "matched"
+        self.assertFalse(math_answer.check(r"\boxed{\text{Tuesday}}", r"\text{Monday}")["ok"])
+        self.assertFalse(math_answer.check(r"\boxed{\mathrm{A}}", r"\mathrm{B}")["ok"])
+        self.assertFalse(math_answer.check(r"\boxed{}", r"\text{x}")["ok"])
+        self.assertTrue(math_answer.check(r"\boxed{\text{Monday}}", "Monday")["ok"])
+        self.assertTrue(math_answer.check(r"\boxed{\text{(B)}}", "B")["ok"])
+        self.assertTrue(math_answer.check(r"\boxed{5\text{ cm}}", "5")["ok"])
+
 
 class TestConstraints(unittest.TestCase):
     def test_check_all(self):
@@ -142,6 +151,14 @@ class TestSQL(unittest.TestCase):
         self.assertTrue(sql_exec.check("SELECT name FROM t WHERE score > 2", "select name from t where score >= 2.5", self.db)["ok"])
         self.assertFalse(sql_exec.check("SELECT name FROM t", "select name from t where id=1", self.db)["ok"])
 
+    def test_empty_gold_and_broken_gold(self):
+        # regression (audit 2): empty gold result let any empty-result query pass; broken gold crashed
+        r = sql_exec.check("SELECT 1 WHERE 0", "SELECT 1 WHERE 0", self.db)
+        self.assertFalse(r["ok"])
+        self.assertIn("gold result empty", r["error"])
+        self.assertTrue(sql_exec.check("SELECT 1 WHERE 0", "SELECT 1 WHERE 0", self.db, allow_empty_gold=True)["ok"])
+        self.assertIn("gold:", sql_exec.check("SELECT 1", "SELEC broken", self.db)["error"])
+
     def test_order_by_and_reject_write(self):
         self.assertFalse(sql_exec.check("select id from t order by id desc", "select id from t order by id", self.db)["ok"])
         self.assertFalse(sql_exec.check("DROP TABLE t", "select 1", self.db)["ok"])
@@ -176,6 +193,9 @@ class TestThinkFormat(unittest.TestCase):
         self.assertFalse(think_format.check("no think here")["ok"])
         self.assertFalse(think_format.check("<think></think>answer")["ok"])
         self.assertFalse(think_format.check("<think>x</think><tool_call>{bad}</tool_call>")["ok"])
+        # regression (audit 2): unclosed <parameter> used to pass with empty arguments
+        bad = "<think>\nplan\n</think>\n\n<tool_call>\n<function=f>\n<parameter=a>\n1\n</function>\n</tool_call>"
+        self.assertFalse(think_format.check(bad)["ok"])
 
 
 if __name__ == "__main__":
