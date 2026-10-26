@@ -170,7 +170,46 @@
 
 ---
 
-## G. รายการตรวจก่อนเริ่มเทรน (ทำได้ภายใน 1 วัน)
+## G. ฮาร์ดแวร์และการใช้งานจริงด้วย llama.cpp (เพิ่ม 2026-10-26 ตามคำตอบของทีม)
+
+เงื่อนไขที่ทีมแจ้ง: ไม่ใช้เชิงพาณิชย์ · เช่า GPU ส่วนใหญ่เป็น RTX 4090 24GB · เครื่องตัวเองเป็น RTX 2060 8GB · ใช้งานจริงด้วย llama.cpp · ไม่จำเป็นต้องให้คิดเป็นภาษาไทย
+
+| งาน | เครื่อง | ทำได้ไหม | หลักฐาน / หมายเหตุ |
+|---|---|---|---|
+| **ใช้งานโมเดลที่เทรนแล้ว** | 2060 8GB + llama.cpp | ✅ GGUF ของ Qwen3.5-4B: Q5_K_M 3.14 GB · Q6_K 3.53 GB · Q8_0 4.48 GB เหลือ VRAM พอสำหรับ context เพราะมีแค่ 8 ชั้น full attention ที่ใช้ KV cache | ขนาดจาก [unsloth/Qwen3.5-4B-GGUF](https://huggingface.co/unsloth/Qwen3.5-4B-GGUF) · llama.cpp รองรับ arch `qwen35` ([llama-arch.cpp](https://raw.githubusercontent.com/ggml-org/llama.cpp/master/src/llama-arch.cpp)) และ parse tool call แบบ XML ของ Qwen3.5 ได้ ([chat.cpp](https://raw.githubusercontent.com/ggml-org/llama.cpp/master/common/chat.cpp): "Qwen3-Coder XML tool calls, also used by … Qwen3.5") |
+| **เทรน LoRA ของ 4B** | 2060 8GB | ❌ | Unsloth: bf16 LoRA ของ 4B ใช้ประมาณ 10 GB (ที่ context สั้น) และไม่แนะนำ QLoRA สำหรับ Qwen3.5 ([Unsloth](https://unsloth.ai/docs/models/qwen3.5/fine-tune.md)) |
+| **เทรน LoRA ของ 4B ที่ 16K** | 4090 24GB | ✅ น่าจะได้ (ต้องทดสอบ) | 10 GB ที่ context สั้น + gradient checkpointing แบบ "unsloth" สำหรับ context ยาว · **ที่ 32–64K ยังไม่แน่ใจ** จึงตัดสินใจไม่เทรน trajectory SWE ยาวๆ ตรงๆ |
+| **รันครู Qwen3.8-27B** | 4090 24GB | ✅ ต้องใช้ 4-bit | GGUF UD-Q4_K_M 16.5 GB ([unsloth/Qwen3.8-27B-GGUF](https://huggingface.co/unsloth/Qwen3.8-27B-GGUF)) หรือ AWQ-INT4 บน vLLM (เร็วกว่าเมื่อสร้างข้อมูลจำนวนมาก) · FP8 (≥27 GB) ต้องใช้ 4090 2 ใบ · quantize แล้วคุณภาพลดลงบ้าง แต่มีตัวตรวจกรองอยู่แล้ว |
+| **environment SWE / terminal (Docker)** | 4090 ที่เช่าจาก RunPod / Vast | ❌ **ใช้ Docker ซ้อนใน pod ไม่ได้** | RunPod: "you cannot spin up your own Docker instance" ([docs](https://docs.runpod.io/pods/overview)) · Vast: "Docker-in-Docker is disabled" ([FAQ](https://docs.vast.ai/documentation/reference/faq/technical)) → **ทางออก:** ให้ GPU ที่เช่าเปิด API ของโมเดล (vLLM / llama-server) แล้วรัน container ของ task บนเครื่องอื่นที่มี Docker (เครื่องของทีม หรือ VPS ราคาถูกที่ใช้ CPU และมีดิสก์เยอะ) container เหล่านี้ไม่ต้องใช้ GPU |
+
+**ข้อควรระวังตอนนำไปใช้กับ llama.cpp**
+1. เปิด `--jinja` เพื่อให้ใช้ chat template ที่ฝังใน GGUF (จำเป็นทั้งต่อ tool call และ thinking)
+2. **GGUF ขนาดเล็กของ Unsloth ปิด thinking เป็นค่าเริ่มต้น** ("For Qwen3.5 0.8B, 2B, 4B and 9B, reasoning is disabled by default" → เปิดด้วย `--chat-template-kwargs '{"enable_thinking":true}'`) ([Unsloth](https://unsloth.ai/docs/models/qwen3.5.md)) · ตอนแปลงโมเดลของเราเป็น GGUF ให้ฝัง chat template ทางการที่คิดเป็นค่าเริ่มต้น แล้วเช็คด้วยตัวเองว่าเปิดอยู่
+3. ขั้นตอน: LoRA → merge เข้า base → `convert_hf_to_gguf.py` → quantize เป็น Q5_K_M หรือ Q6_K → **วัดผลซ้ำบนไฟล์ GGUF** เพราะ quantize อาจทำให้โมเดลเล็กที่ fine-tune แล้วแย่ลง [ความเห็น: ไม่พบงานที่วัดเฉพาะกรณีนี้]
+4. sampling ตามการ์ด: thinking `T=1.0, top_p=0.95, top_k=20, presence_penalty=1.5` (ถ้าภาษาปนให้ลด presence_penalty)
+5. การ์ดแนะนำ context ตอนใช้งาน ≥128K เพื่อรักษาความสามารถในการคิด แต่บน 2060 ให้เริ่มที่ 32K แล้วดูความเร็วกับหน่วยความจำ
+
+---
+
+## H. ชุดวัดผลเริ่มต้นที่แนะนำ (held-out ห้ามเทรน)
+คัดจากหมวด K ใน `DATASET_HUNT.md` ให้เหมาะกับเครื่องของทีม · รันกับ base ก่อนเทรน แล้วรันซ้ำทุก checkpoint และบนไฟล์ GGUF สุดท้าย
+
+| ทักษะ | ชุด | จำนวนข้อ | ต้องใช้ Docker? | หมายเหตุ |
+|---|---|---|---|---|
+| tool calling | [BFCL v4](https://github.com/ShishirPatil/gorilla/tree/main/berkeley-function-call-leaderboard) | 4,696 | ไม่ | ชุดมาตรฐาน · **ห้ามใช้ When2Call test เป็นชุดคู่** เพราะสร้างจาก BFCL |
+| tool หลายขั้น (รันในเครื่อง) | [ToolHop](https://huggingface.co/datasets/bytedance-research/ToolHop) | 995 | ไม่ | CC-BY-4.0 · tool รันได้จริง ตรวจคำตอบได้ |
+| agent คุยกับผู้ใช้ | [tau2-bench](https://github.com/sierra-research/tau2-bench) | 50 งาน × 3 โดเมน | ไม่ | ต้องใช้ LLM อีกตัวจำลองผู้ใช้ (ใช้ครูได้) · ถ้าใช้ชุดนี้ห้ามเทรนด้วย ToolScale / APIGen-MT |
+| คิดพอดี ไม่คิดเกิน | [S1-Bench](https://huggingface.co/datasets/WYRipple/S1-Bench) + [OptimalThinkingBench](https://huggingface.co/datasets/facebook/optimal_thinking_bench) | 422 + 1,877 | ไม่ | วัดทั้งความแม่นและจำนวน token · ครึ่งยากของ OTB มาจาก reasoning-gym (ถ้าเทรนด้วย reasoning-gym ให้ใช้แค่ครึ่งง่าย) |
+| ภาษาไทย ความรู้/เหตุผล | [ThaiExam](https://huggingface.co/datasets/typhoon-ai/thai_exam) **เฉพาะ tgat, tpat1, a_level, ic** | 403 | ไม่ | **ตัด onet ออก** เพราะซ้ำกับ thai-onet-m6-exam ที่เทรนอยู่ |
+| ภาษาไทย ทำตามคำสั่ง | [IFEval-TH](https://huggingface.co/datasets/typhoon-ai/ifeval-th) | 215 | ไม่ | ใช้ pythainlp นับคำตามที่ README บอก |
+| ภาษาไทย สนทนาหลายรอบ | [MT-Bench-Thai](https://huggingface.co/datasets/ThaiLLM-Leaderboard/mt-bench-thai) | 91 | ไม่ | ใช้ LLM-judge (ครูเป็น judge ได้ แต่มีอคติ ควรอ่านเองบางส่วน) |
+| long context | [RULER](https://github.com/NVIDIA/RULER) ที่ 8K / 16K / 32K | สร้างได้เอง | ไม่ | เฝ้าดูการลืมของโมเดล hybrid หลัง CoT-SFT |
+| ความรู้ทั่วไป / คณิต | MMLU-Pro, GSM8K test (มีอยู่แล้ว) | — | ไม่ | ใช้เป็น forgetting suite |
+| agent ใน terminal / SWE | [Terminal-Bench 2.0](https://huggingface.co/datasets/harborframework/terminal-bench-2.0) (89) · SWE-bench Verified (500) | — | **ต้องใช้** | รันบนเครื่องที่มี Docker (ไม่ใช่ pod ที่เช่า) · ทำเป็นขั้นสุดท้าย |
+
+---
+
+## I. รายการตรวจก่อนเริ่มเทรน (ทำได้ภายใน 1 วัน)
 1. ☐ เรนเดอร์ converter output ผ่าน `chat_template.jinja` แล้วเทียบ token กับ output ของ vLLM (`--reasoning-parser qwen3 --tool-call-parser qwen3_coder`) ว่าตรงกัน
 2. ☐ ทดสอบ packing: loss ของ batch ที่ pack = loss ของ batch ที่ไม่ pack (ไม่งั้นปิด packing)
 3. ☐ วัด baseline ของ Qwen3.5-4B: ความแม่น, จำนวน thinking token ต่อถังความยาก, BFCL-style, When2Call (ส่วนที่ไม่ได้มาจาก BFCL), ThaiExam (ไม่รวม onet), RULER 16K
