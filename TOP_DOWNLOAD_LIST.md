@@ -46,7 +46,7 @@
 | 29 | [allenai/TMax-15K](https://huggingface.co/datasets/allenai/TMax-15K) | A/L | `data/*.parquet`, `tasks.zip` | 513.3 | ODC-BY | prompt-only (ต้องใช้ Docker) | `allenai__TMax-15K` | 14.6k task terminal ที่ตรวจด้วย pytest ใช้ให้ครูสร้าง trajectory ใหม่ |
 | 30 | [nvidia/Open-SWE-Traces](https://huggingface.co/datasets/nvidia/Open-SWE-Traces) (v1.2 minisweagent, **qwen38_27b**) | A | `data/minisweagent/qwen38_27b/scale-swe/train-0000[0-3]-*`, `data/minisweagent/qwen38_27b/swe-rebench-v2/train-0000[0-3]-*` | 2017.4 (8 shard จาก 44) | CC-BY-4.0 | ใช้ตรง (resolved=1, ≤16K) | `nvidia__Open-SWE-Traces__v1.2-minisweagent` | ครูรุ่นเดียวกับเรา (Qwen3.8-27B) ส่วนนี้ไม่ซ้ำกับ opencode/flash_next ที่มีอยู่แล้ว |
 
-**ขนาดรวมทั้ง 30 ชุด ≈ 4.4 GB** (ถ้าตัด #30 ออกจะเหลือ ≈ 2.4 GB)
+**ขนาดรวมทั้ง 30 ชุด ≈ 4.5 GB** (ถ้าตัด #30 ออกจะเหลือ ≈ 2.5 GB)
 
 ### สำรอง (ไฟล์ใหญ่หรือคุณค่ารองลงมา; มี converter ให้แล้ว)
 | ชุด | ไฟล์ | MB | หมายเหตุ |
