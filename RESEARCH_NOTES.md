@@ -46,7 +46,7 @@
 ## 4. สร้างข้อมูล "คิดสั้นกับโจทย์ง่าย คิดยาวกับโจทย์ยาก" ด้วยครู Qwen3.8-27B + verifier
 
 **ขั้นที่ 1: รวม prompt ที่มีตัวตรวจ (ไม่ใช้คำตอบเดิม)**
-- คณิต: `nvidia/Nemotron-Math-v2` (มี pass rate low/med/high ใน metadata), DeepScaleR, ชุด RLVR ที่มีอยู่ · แชทง่าย: prompt ฝั่ง reasoning-off ของ `Nemotron-Post-Training-Dataset-v1` chat · agent/tool: ชุดที่มีอยู่แล้ว (มี exact-match) · ไทย: ชุดไทยที่มีอยู่ — ดู [F.md](hunt_sections/F.md)
+- คณิต: `nvidia/Nemotron-Math-v2` (มี pass rate low/med/high ใน metadata), DeepScaleR, ชุด RLVR ที่มีอยู่ · แชทง่าย: `HuggingFaceTB/smoltalk2` (`*_Qwen3_32B_think`) — **หมายเหตุ:** prompt ของ `Nemotron-Post-Training-Dataset-v1` chat ถูกลบเป็นข้อความว่าง (ตรวจจากแถวจริง ดู OPEN_QUESTIONS ข้อ 10) จึงใช้ไม่ได้ · agent/tool: ชุดที่มีอยู่แล้ว (มี exact-match) · ไทย: ชุดไทยที่มีอยู่ — ดู [F.md](hunt_sections/F.md)
 
 **ขั้นที่ 2: วัดความยากด้วยตัวนักเรียน**
 - ให้ Qwen3.5-4B (ก่อนเทรน, thinking) สุ่มคำตอบ **K=8 ครั้งต่อ prompt** (T≈0.6–0.7, max 16K) แล้วคิด pass rate p และความยาวของคำตอบที่ถูก (AdaptThink ใช้ K=16, tokenskip ใช้ N=8 บน Qwen3-4B) — [AdaptThink](https://arxiv.org/abs/2505.13417) [ไม่ใช่ 4B (1.5B/7B)], [tokenskip-qwen3-4b](https://huggingface.co/datasets/leapeto/tokenskip-math-qwen3-4b-thinking-n8) [ใกล้ 4B]

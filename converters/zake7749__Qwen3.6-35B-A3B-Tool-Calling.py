@@ -1,7 +1,9 @@
 """zake7749/Qwen3.6-35B-A3B-Tool-Calling: Qwen3.6-35B-A3B (thinking) samples that exact-matched the gold
 call (name + parsed args). Each row = conversation prefix ending in the chosen assistant turn.
-Usable directly (has reasoning). Earlier assistant turns may also carry reasoning — set DROP_PRIOR_REASONING=1
-(default) to strip it (matches Qwen3 template, which drops past reasoning). No license tag on the card.
+Usable directly (has reasoning). Earlier assistant turns may also carry reasoning. Default keeps it: the official
+Qwen3.5 chat_template already renders reasoning only for assistant turns AFTER the last user message (the tool loop)
+and strips it before that, so stripping here would make tool-loop turns differ from inference.
+DROP_PRIOR_REASONING=1 strips reasoning from every assistant turn except the last. No license tag on the card.
 """
 import json
 import os
@@ -12,7 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from common import *  # noqa: E402,F401,F403
 
 SRC = "zake7749/Qwen3.6-35B-A3B-Tool-Calling"
-DROP_PRIOR = os.environ.get("DROP_PRIOR_REASONING", "1") == "1"
+DROP_PRIOR = os.environ.get("DROP_PRIOR_REASONING", "0") == "1"
 
 
 def convert(row):
