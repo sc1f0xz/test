@@ -18,7 +18,7 @@ sys.path.insert(0, HERE)
 from common import validate_record  # noqa: E402
 
 
-def run_one(name: str) -> tuple[bool, str]:
+def run_one(name: str, role: str = "") -> tuple[bool, str]:
     spec = importlib.util.spec_from_file_location(name, os.path.join(HERE, f"{name}.py"))
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
@@ -41,14 +41,15 @@ def run_one(name: str) -> tuple[bool, str]:
                 problems.append(f"row{i}: {errs[:2]}")
             else:
                 n_out += 1
-    ok = n_out >= 1 and n_err <= 0.2 * len(rows)
+    # role "exclude" converters may legitimately skip every row (they must still not crash)
+    ok = (n_out >= 1 or role == "exclude") and n_err <= 0.2 * len(rows)
     return ok, f"{len(rows)} rows -> {n_out} records, {n_err} errors" + (f" | {problems[:2]}" if problems else "")
 
 
 def check_registry(names):
     reg = json.load(open(os.path.join(HERE, "registry.json"), encoding="utf-8"))
     missing = [n for n in names if n not in reg]
-    bad = [n for n, v in reg.items() if n != "_doc" and v.get("role") not in {"sft", "prompt_only", "dpo", "style"}]
+    bad = [n for n, v in reg.items() if n != "_doc" and v.get("role") not in {"sft", "prompt_only", "dpo", "style", "exclude"}]
     return missing, bad
 
 
@@ -56,8 +57,9 @@ if __name__ == "__main__":
     names = sys.argv[1:] or sorted(f[:-3] for f in os.listdir(HERE)
                                    if f.endswith(".py") and f not in {"common.py", "test_converters.py", "__init__.py"})
     failed = 0
+    reg = json.load(open(os.path.join(HERE, "registry.json"), encoding="utf-8"))
     for n in names:
-        ok, msg = run_one(n)
+        ok, msg = run_one(n, (reg.get(n) or {}).get("role", ""))
         failed += not ok
         print(f"{'PASS' if ok else 'FAIL'}  {n}: {msg}")
     missing, bad = check_registry(names)

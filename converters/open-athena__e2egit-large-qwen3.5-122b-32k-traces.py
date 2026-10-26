@@ -20,8 +20,9 @@ def convert(row):
     if result < 1.0 and not KEEP_FAILED:
         return None
     msgs = [generic_message(m) for m in row["conversations"]]
-    if msgs and msgs[0]["role"] == "user" and not msgs[0]["content"].strip():
-        msgs[0]["content"] = row.get("instruction") or ""
+    first_user = next((m for m in msgs if m["role"] == "user"), None)
+    if first_user is None or not first_user["content"].strip():
+        return None  # never fall back to `instruction`: in some sibling repos it is the model's final answer
     return record(msgs, None, f"{SRC}#{row.get('trial_name')}", {"result": result, "task": row.get("task")})
 
 
