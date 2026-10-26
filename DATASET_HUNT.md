@@ -13,7 +13,7 @@
 - ทุกหมวดมีบล็อก `TOP_CANDIDATES` (json) ที่ใช้คัดเข้า [TOP_DOWNLOAD_LIST.md](TOP_DOWNLOAD_LIST.md)
 
 ## ไฟล์ที่เกี่ยวข้อง
-[TOP_DOWNLOAD_LIST.md](TOP_DOWNLOAD_LIST.md) · `samples/` · `converters/` (40 ตัว, รัน `python3 converters/test_converters.py`) · [VERIFIERS.md](VERIFIERS.md) + `verifiers/` · [CONTAMINATION.md](CONTAMINATION.md) + `tools/contamination.py` · [RESEARCH_NOTES.md](RESEARCH_NOTES.md) · [OPEN_QUESTIONS.md](OPEN_QUESTIONS.md)
+[RUNBOOK.md](RUNBOOK.md) (ขั้นตอนลงมือ) · [TOP_DOWNLOAD_LIST.md](TOP_DOWNLOAD_LIST.md) · `samples/` · `converters/` (40 ตัว, รัน `python3 converters/test_converters.py`) · [VERIFIERS.md](VERIFIERS.md) + `verifiers/` · [CONTAMINATION.md](CONTAMINATION.md) + `tools/contamination.py` · [RESEARCH_NOTES.md](RESEARCH_NOTES.md) · [OPEN_QUESTIONS.md](OPEN_QUESTIONS.md)
 
 ## สารบัญ
 - [A. Trajectory agent ที่มี reasoning จากโมเดลตระกูล Qwen (และโมเดลเปิดรูปแบบใกล้เคียง) พร้อมสัญญาณความสำเร็จ: terminal / SWE / data-science / DevOps / SQL / browser / filesystem / MCP](#sec-a) — 13 รายการในตารางหลัก
